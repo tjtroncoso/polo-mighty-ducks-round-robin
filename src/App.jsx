@@ -24,6 +24,27 @@ const createBlankPlayer = () => ({
   arrival: "",
 });
 
+function seededRandom(seed) {
+  let value = seed % 2147483647;
+  if (value <= 0) value += 2147483646;
+
+  return () => {
+    value = (value * 16807) % 2147483647;
+    return (value - 1) / 2147483646;
+  };
+}
+
+function shuffleArray(items, random) {
+  const shuffled = [...items];
+
+  for (let i = shuffled.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+
+  return shuffled;
+}
+
 function buildPlayersTextFromRows(playerRows) {
   return playerRows
     .map((row) => {
@@ -130,18 +151,22 @@ function scorePair(playerA, playerB, partnerMap) {
   return score;
 }
 
-function chooseBestPair(players, partnerMap) {
+function chooseBestPair(players, partnerMap, random = Math.random) {
   if (players.length < 2) return null;
 
   let bestPair = null;
   let bestScore = Infinity;
+  let bestTieBreaker = Infinity;
 
   for (let i = 0; i < players.length; i += 1) {
     for (let j = i + 1; j < players.length; j += 1) {
       const currentScore = scorePair(players[i], players[j], partnerMap);
-      if (currentScore < bestScore) {
+      const tieBreaker = random();
+
+      if (currentScore < bestScore || (currentScore === bestScore && tieBreaker < bestTieBreaker)) {
         bestPair = [players[i], players[j]];
         bestScore = currentScore;
+        bestTieBreaker = tieBreaker;
       }
     }
   }
@@ -167,17 +192,18 @@ function scoreDoublesMatch(pairA, pairB, opponentMap) {
   return score;
 }
 
-function chooseBestDoublesMatch(pool, partnerMap, opponentMap) {
+function chooseBestDoublesMatch(pool, partnerMap, opponentMap, random = Math.random) {
   if (pool.length < 4) return null;
 
   let bestMatch = null;
   let bestScore = Infinity;
+  let bestTieBreaker = Infinity;
 
   for (let a = 0; a < pool.length; a += 1) {
     for (let b = a + 1; b < pool.length; b += 1) {
       const pairA = [pool[a], pool[b]];
       const remaining = pool.filter((_, index) => index !== a && index !== b);
-      const pairB = chooseBestPair(remaining, partnerMap);
+      const pairB = chooseBestPair(remaining, partnerMap, random);
 
       if (!pairB) continue;
 
@@ -185,10 +211,12 @@ function chooseBestDoublesMatch(pool, partnerMap, opponentMap) {
         scorePair(pairA[0], pairA[1], partnerMap) +
         scorePair(pairB[0], pairB[1], partnerMap) +
         scoreDoublesMatch(pairA, pairB, opponentMap);
+      const tieBreaker = random();
 
-      if (currentScore < bestScore) {
+      if (currentScore < bestScore || (currentScore === bestScore && tieBreaker < bestTieBreaker)) {
         bestMatch = { pairA, pairB };
         bestScore = currentScore;
+        bestTieBreaker = tieBreaker;
       }
     }
   }
@@ -221,12 +249,13 @@ function makeCourtList(courtNumbers, courtCount) {
   });
 }
 
-function generateSchedule({ playersText, startTime, courts, rounds, minutesPerRound, courtNumbers, mode }) {
+function generateSchedule({ playersText, startTime, courts, rounds, minutesPerRound, courtNumbers, mode, shuffleSeed = 1 }) {
   const safeCourts = parseOptionalPositiveInteger(courts, 0, 0, 20);
   const safeRounds = parseOptionalPositiveInteger(rounds, 0, 0, 20);
   const safeMinutesPerRound = parseOptionalPositiveInteger(minutesPerRound, 30, 5, 180);
   const startMinutes = parseTimeToMinutes(startTime, 19 * 60);
-  const players = parsePlayers(playersText, startTime || "7:00 PM");
+  const random = seededRandom(shuffleSeed || 1);
+  const players = shuffleArray(parsePlayers(playersText, startTime || "7:00 PM"), random);
   const partnerMap = new Map();
   const opponentMap = new Map();
   const courtList = makeCourtList(courtNumbers, safeCourts);
@@ -248,16 +277,16 @@ function generateSchedule({ playersText, startTime, courts, rounds, minutesPerRo
 
     const available = players
       .filter((player) => player.arrivalMinutes <= roundStart)
-      .sort((a, b) => a.matches - b.matches || a.arrivalMinutes - b.arrivalMinutes || a.name.localeCompare(b.name));
+      .sort((a, b) => a.matches - b.matches || a.arrivalMinutes - b.arrivalMinutes || random() - 0.5);
 
     for (let courtIndex = 0; courtIndex < safeCourts; courtIndex += 1) {
       const pool = available
         .filter((player) => !used.has(player.name))
-        .sort((a, b) => a.matches - b.matches || a.name.localeCompare(b.name));
+        .sort((a, b) => a.matches - b.matches || random() - 0.5);
 
       if (pool.length < 4) break;
 
-      const bestMatch = chooseBestDoublesMatch(pool, partnerMap, opponentMap);
+      const bestMatch = chooseBestDoublesMatch(pool, partnerMap, opponentMap, random);
       if (!bestMatch) break;
 
       bestMatch.pairA.forEach((player) => used.add(player.name));
@@ -280,7 +309,7 @@ function generateSchedule({ playersText, startTime, courts, rounds, minutesPerRo
     let sitOuts = available.filter((player) => !used.has(player.name));
 
     if (mode === "singles" && matches.length < safeCourts && sitOuts.length >= 2) {
-      const singlesPlayers = [...sitOuts].sort((a, b) => a.matches - b.matches || a.name.localeCompare(b.name)).slice(0, 2);
+      const singlesPlayers = [...sitOuts].sort((a, b) => a.matches - b.matches || random() - 0.5).slice(0, 2);
       singlesPlayers.forEach((player) => {
         used.add(player.name);
         player.matches += 1;
@@ -375,6 +404,101 @@ function copyTextToClipboard(text) {
   });
 }
 
+function runDeveloperTests() {
+  const results = [];
+  const assert = (name, condition) => {
+    results.push({ name, passed: Boolean(condition) });
+  };
+
+  assert("parseTimeToMinutes handles 7:30 PM", parseTimeToMinutes("7:30 PM") === 1170);
+  assert("parseTimeToMinutes handles 12:00 AM", parseTimeToMinutes("12:00 AM") === 0);
+  assert("formatRoundTime handles round increments", formatRoundTime(19 * 60, 1, 30) === "7:30 PM");
+
+  const parsedSamplePlayers = parsePlayers(samplePlayers, "7:00 PM");
+  assert("sample player list includes Mullen", parsedSamplePlayers.some((player) => player.name === "Mullen"));
+  assert("sample player list includes Wright", parsedSamplePlayers.some((player) => player.name === "Wright"));
+  assert("sample player list includes Speigner after Wright", parsedSamplePlayers.some((player) => player.name === "Speigner"));
+  assert("blank player field parses as zero players", parsePlayers("", "").length === 0);
+
+  const rowText = buildPlayersTextFromRows([
+    { name: "A", isLate: false, arrival: "" },
+    { name: "B", isLate: true, arrival: "7:30 PM" },
+    { name: "", isLate: true, arrival: "8:00 PM" },
+  ]);
+  assert("player rows convert to newline text", rowText === "A\nB, 7:30 PM");
+  assert("late arrival row parses correctly", parsePlayers(rowText, "7:00 PM").some((player) => player.name === "B" && player.arrival === "7:30 PM"));
+
+  assert("court list uses individual court numbers", makeCourtList(["5", "6", "10"], 3).join(",") === "Court 5,Court 6,Court 10");
+  assert("court list falls back for blank individual courts", makeCourtList(["5", "", "10"], 3).join(",") === "Court 5,Court 2,Court 10");
+
+  const blankSchedule = generateSchedule({
+    playersText: "",
+    startTime: "",
+    courts: "",
+    rounds: "",
+    minutesPerRound: "",
+    courtNumbers: [],
+    mode: "doubles",
+  });
+  assert("blank form produces no schedule", blankSchedule.schedule.length === 0 && blankSchedule.standings.length === 0);
+
+  const smallSchedule = generateSchedule({
+    playersText: "A\nB\nC\nD",
+    startTime: "7:00 PM",
+    courts: 1,
+    rounds: 1,
+    minutesPerRound: 30,
+    courtNumbers: ["1"],
+    mode: "doubles",
+  });
+  assert("four players creates one doubles match", smallSchedule.schedule[0].matches.length === 1);
+
+  const lateSchedule = generateSchedule({
+    playersText: "A\nB\nC\nD\nE, 7:30 PM",
+    startTime: "7:00 PM",
+    courts: 1,
+    rounds: 2,
+    minutesPerRound: 30,
+    courtNumbers: ["1"],
+    mode: "doubles",
+  });
+  assert("late player is excluded from round one", lateSchedule.schedule[0].notArrived.some((player) => player.name === "E"));
+  assert("late player is available by round two", !lateSchedule.schedule[1].notArrived.some((player) => player.name === "E"));
+
+  const timedCopy = buildCopyText(smallSchedule.schedule, "timed");
+  const setCopy = buildCopyText(smallSchedule.schedule, "set");
+  assert("timed copy includes actual round time", timedCopy.includes("Round 1 - 7:00 PM"));
+  assert("set copy includes one set label", setCopy.includes("Round 1 - One Set"));
+  assert("copy text includes court matchup", timedCopy.includes("Court 1 -"));
+
+  const shufflePlayers = "A\nB\nC\nD\nE\nF\nG\nH";
+  const scheduleSeedOne = generateSchedule({
+    playersText: shufflePlayers,
+    startTime: "7:00 PM",
+    courts: 2,
+    rounds: 2,
+    minutesPerRound: 30,
+    courtNumbers: ["1", "2"],
+    mode: "doubles",
+    shuffleSeed: 1,
+  });
+  const scheduleSeedTwo = generateSchedule({
+    playersText: shufflePlayers,
+    startTime: "7:00 PM",
+    courts: 2,
+    rounds: 2,
+    minutesPerRound: 30,
+    courtNumbers: ["1", "2"],
+    mode: "doubles",
+    shuffleSeed: 99,
+  });
+  assert("different shuffle seeds can produce different schedules", buildCopyText(scheduleSeedOne.schedule, "timed") !== buildCopyText(scheduleSeedTwo.schedule, "timed"));
+
+  return results;
+}
+
+const developerTestResults = runDeveloperTests();
+
 function FieldLabel({ children }) {
   return <label className="text-sm font-semibold text-slate-700">{children}</label>;
 }
@@ -397,6 +521,7 @@ export default function TennisRoundRobinGenerator() {
   const [courtNumbers, setCourtNumbers] = useState([]);
   const [mode, setMode] = useState("doubles");
   const [copyStatus, setCopyStatus] = useState("idle");
+  const [shuffleSeed, setShuffleSeed] = useState(1);
   const outputRef = useRef(null);
 
   const courtCount = parseOptionalPositiveInteger(courts, 0, 0, 20);
@@ -413,8 +538,9 @@ export default function TennisRoundRobinGenerator() {
         minutesPerRound,
         courtNumbers: visibleCourtNumbers,
         mode,
+        shuffleSeed,
       }),
-    [playersText, startTime, courts, rounds, minutesPerRound, visibleCourtNumbers, mode]
+    [playersText, startTime, courts, rounds, minutesPerRound, visibleCourtNumbers, mode, shuffleSeed]
   );
 
   const copyText = useMemo(() => buildCopyText(generated.schedule, matchFormat), [generated.schedule, matchFormat]);
@@ -463,6 +589,11 @@ export default function TennisRoundRobinGenerator() {
     });
   }
 
+  function shuffleSchedule() {
+    setShuffleSeed((current) => current + 1);
+    setCopyStatus("idle");
+  }
+
   function clearForm() {
     setPlayerRows([createBlankPlayer()]);
     setStartTime("");
@@ -473,6 +604,7 @@ export default function TennisRoundRobinGenerator() {
     setMatchFormat("timed");
     setMode("doubles");
     setCopyStatus("idle");
+    setShuffleSeed(1);
   }
 
   const playerCount = parsePlayers(playersText, startTime).length;
@@ -690,23 +822,31 @@ export default function TennisRoundRobinGenerator() {
                 </div>
               </div>
 
-              <div className="flex gap-3 pt-1">
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={shuffleSchedule}
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl border border-emerald-900/20 bg-white px-4 py-3 text-sm font-semibold text-emerald-950 shadow-sm transition hover:bg-emerald-50"
+                >
+                  <Shuffle className="h-4 w-4" /> Shuffle
+                </button>
                 <button
                   type="button"
                   onClick={copySchedule}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-2xl bg-emerald-950 px-4 py-3 text-sm font-semibold text-white shadow-lg transition hover:bg-emerald-800"
+                  className="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-950 px-4 py-3 text-sm font-semibold text-white shadow-lg transition hover:bg-emerald-800"
                 >
                   <Copy className="h-4 w-4" /> {copyStatus === "copied" ? "Copied" : copyStatus === "manual" ? "Select Text Below" : copyStatus === "empty" ? "Nothing to Copy" : "Copy Schedule"}
                 </button>
-                <button
-                  type="button"
-                  onClick={clearForm}
-                  className="rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold transition hover:bg-slate-100"
-                  aria-label="Clear form"
-                >
-                  <RefreshCw className="h-4 w-4" />
-                </button>
               </div>
+
+              <button
+                type="button"
+                onClick={clearForm}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-300 bg-white px-4 py-3 text-sm font-semibold transition hover:bg-slate-100"
+                aria-label="Clear form"
+              >
+                <RefreshCw className="h-4 w-4" /> Reset Form
+              </button>
 
               {copyStatus === "manual" ? (
                 <div className="rounded-2xl bg-amber-50 p-3 text-sm text-amber-800">
