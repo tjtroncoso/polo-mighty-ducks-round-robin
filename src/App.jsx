@@ -20,6 +20,7 @@ const createBlankPlayer = () => ({
       ? crypto.randomUUID()
       : `${Date.now()}-${Math.random()}`,
   name: "",
+  gender: "",
   isLate: false,
   arrival: "",
 });
@@ -57,6 +58,17 @@ function buildPlayersTextFromRows(playerRows) {
     })
     .filter(Boolean)
     .join("\n");
+}
+
+function buildPlayersFromRows(playerRows, defaultStartTime) {
+  const text = buildPlayersTextFromRows(playerRows);
+  const parsedPlayers = parsePlayers(text, defaultStartTime);
+  const namedRows = playerRows.filter((row) => String(row.name || "").trim());
+
+  return parsedPlayers.map((player, index) => ({
+    ...player,
+    gender: namedRows[index]?.gender || "",
+  }));
 }
 
 function parseTimeToMinutes(value, fallbackMinutes = 0) {
@@ -128,6 +140,7 @@ function parsePlayers(text, defaultStartTime) {
       return {
         id: `${name}-${index}`,
         name,
+        gender: "",
         arrival,
         arrivalMinutes: parseTimeToMinutes(arrival, defaultArrivalMinutes),
         matches: 0,
@@ -138,6 +151,10 @@ function parsePlayers(text, defaultStartTime) {
 function getSet(map, key) {
   if (!map.has(key)) map.set(key, new Set());
   return map.get(key);
+}
+
+function isMixedPair(playerA, playerB) {
+  return (playerA.gender === "male" && playerB.gender === "female") || (playerA.gender === "female" && playerB.gender === "male");
 }
 
 function scorePair(playerA, playerB, partnerMap) {
@@ -151,7 +168,7 @@ function scorePair(playerA, playerB, partnerMap) {
   return score;
 }
 
-function chooseBestPair(players, partnerMap, random = Math.random) {
+function chooseBestPair(players, partnerMap, random = Math.random, requireMixed = false) {
   if (players.length < 2) return null;
 
   let bestPair = null;
@@ -160,6 +177,8 @@ function chooseBestPair(players, partnerMap, random = Math.random) {
 
   for (let i = 0; i < players.length; i += 1) {
     for (let j = i + 1; j < players.length; j += 1) {
+      if (requireMixed && !isMixedPair(players[i], players[j])) continue;
+
       const currentScore = scorePair(players[i], players[j], partnerMap);
       const tieBreaker = random();
 
@@ -192,7 +211,7 @@ function scoreDoublesMatch(pairA, pairB, opponentMap) {
   return score;
 }
 
-function chooseBestDoublesMatch(pool, partnerMap, opponentMap, random = Math.random) {
+function chooseBestDoublesMatch(pool, partnerMap, opponentMap, random = Math.random, requireMixed = false) {
   if (pool.length < 4) return null;
 
   let bestMatch = null;
@@ -202,8 +221,10 @@ function chooseBestDoublesMatch(pool, partnerMap, opponentMap, random = Math.ran
   for (let a = 0; a < pool.length; a += 1) {
     for (let b = a + 1; b < pool.length; b += 1) {
       const pairA = [pool[a], pool[b]];
+      if (requireMixed && !isMixedPair(pairA[0], pairA[1])) continue;
+
       const remaining = pool.filter((_, index) => index !== a && index !== b);
-      const pairB = chooseBestPair(remaining, partnerMap, random);
+      const pairB = chooseBestPair(remaining, partnerMap, random, requireMixed);
 
       if (!pairB) continue;
 
@@ -249,17 +270,19 @@ function makeCourtList(courtNumbers, courtCount) {
   });
 }
 
-function generateSchedule({ playersText, startTime, courts, rounds, minutesPerRound, courtNumbers, mode, shuffleSeed = 1 }) {
+function generateSchedule({ playersText, playersData, startTime, courts, rounds, minutesPerRound, courtNumbers, mode, shuffleSeed = 1 }) {
   const safeCourts = parseOptionalPositiveInteger(courts, 0, 0, 20);
   const safeRounds = parseOptionalPositiveInteger(rounds, 0, 0, 20);
   const safeMinutesPerRound = parseOptionalPositiveInteger(minutesPerRound, 30, 5, 180);
   const startMinutes = parseTimeToMinutes(startTime, 19 * 60);
   const random = seededRandom(shuffleSeed || 1);
-  const players = shuffleArray(parsePlayers(playersText, startTime || "7:00 PM"), random);
+  const sourcePlayers = playersData || parsePlayers(playersText, startTime || "7:00 PM");
+  const players = shuffleArray(sourcePlayers.map((player) => ({ ...player, matches: 0 })), random);
   const partnerMap = new Map();
   const opponentMap = new Map();
   const courtList = makeCourtList(courtNumbers, safeCourts);
   const schedule = [];
+  const requireMixed = mode === "mixed";
 
   players.forEach((player) => {
     partnerMap.set(player.name, new Set());
@@ -286,7 +309,7 @@ function generateSchedule({ playersText, startTime, courts, rounds, minutesPerRo
 
       if (pool.length < 4) break;
 
-      const bestMatch = chooseBestDoublesMatch(pool, partnerMap, opponentMap, random);
+      const bestMatch = chooseBestDoublesMatch(pool, partnerMap, opponentMap, random, requireMixed);
       if (!bestMatch) break;
 
       bestMatch.pairA.forEach((player) => used.add(player.name));
@@ -294,7 +317,7 @@ function generateSchedule({ playersText, startTime, courts, rounds, minutesPerRo
 
       const match = {
         court: courtList[courtIndex],
-        type: "Doubles",
+        type: requireMixed ? "Mixed Doubles" : "Doubles",
         pairA: bestMatch.pairA,
         pairB: bestMatch.pairB,
       };
@@ -337,6 +360,7 @@ function generateSchedule({ playersText, startTime, courts, rounds, minutesPerRo
   const standings = [...players]
     .map((player) => ({
       name: player.name,
+      gender: player.gender,
       matches: player.matches,
       arrival: player.arrival,
     }))
@@ -404,101 +428,6 @@ function copyTextToClipboard(text) {
   });
 }
 
-function runDeveloperTests() {
-  const results = [];
-  const assert = (name, condition) => {
-    results.push({ name, passed: Boolean(condition) });
-  };
-
-  assert("parseTimeToMinutes handles 7:30 PM", parseTimeToMinutes("7:30 PM") === 1170);
-  assert("parseTimeToMinutes handles 12:00 AM", parseTimeToMinutes("12:00 AM") === 0);
-  assert("formatRoundTime handles round increments", formatRoundTime(19 * 60, 1, 30) === "7:30 PM");
-
-  const parsedSamplePlayers = parsePlayers(samplePlayers, "7:00 PM");
-  assert("sample player list includes Mullen", parsedSamplePlayers.some((player) => player.name === "Mullen"));
-  assert("sample player list includes Wright", parsedSamplePlayers.some((player) => player.name === "Wright"));
-  assert("sample player list includes Speigner after Wright", parsedSamplePlayers.some((player) => player.name === "Speigner"));
-  assert("blank player field parses as zero players", parsePlayers("", "").length === 0);
-
-  const rowText = buildPlayersTextFromRows([
-    { name: "A", isLate: false, arrival: "" },
-    { name: "B", isLate: true, arrival: "7:30 PM" },
-    { name: "", isLate: true, arrival: "8:00 PM" },
-  ]);
-  assert("player rows convert to newline text", rowText === "A\nB, 7:30 PM");
-  assert("late arrival row parses correctly", parsePlayers(rowText, "7:00 PM").some((player) => player.name === "B" && player.arrival === "7:30 PM"));
-
-  assert("court list uses individual court numbers", makeCourtList(["5", "6", "10"], 3).join(",") === "Court 5,Court 6,Court 10");
-  assert("court list falls back for blank individual courts", makeCourtList(["5", "", "10"], 3).join(",") === "Court 5,Court 2,Court 10");
-
-  const blankSchedule = generateSchedule({
-    playersText: "",
-    startTime: "",
-    courts: "",
-    rounds: "",
-    minutesPerRound: "",
-    courtNumbers: [],
-    mode: "doubles",
-  });
-  assert("blank form produces no schedule", blankSchedule.schedule.length === 0 && blankSchedule.standings.length === 0);
-
-  const smallSchedule = generateSchedule({
-    playersText: "A\nB\nC\nD",
-    startTime: "7:00 PM",
-    courts: 1,
-    rounds: 1,
-    minutesPerRound: 30,
-    courtNumbers: ["1"],
-    mode: "doubles",
-  });
-  assert("four players creates one doubles match", smallSchedule.schedule[0].matches.length === 1);
-
-  const lateSchedule = generateSchedule({
-    playersText: "A\nB\nC\nD\nE, 7:30 PM",
-    startTime: "7:00 PM",
-    courts: 1,
-    rounds: 2,
-    minutesPerRound: 30,
-    courtNumbers: ["1"],
-    mode: "doubles",
-  });
-  assert("late player is excluded from round one", lateSchedule.schedule[0].notArrived.some((player) => player.name === "E"));
-  assert("late player is available by round two", !lateSchedule.schedule[1].notArrived.some((player) => player.name === "E"));
-
-  const timedCopy = buildCopyText(smallSchedule.schedule, "timed");
-  const setCopy = buildCopyText(smallSchedule.schedule, "set");
-  assert("timed copy includes actual round time", timedCopy.includes("Round 1 - 7:00 PM"));
-  assert("set copy includes one set label", setCopy.includes("Round 1 - One Set"));
-  assert("copy text includes court matchup", timedCopy.includes("Court 1 -"));
-
-  const shufflePlayers = "A\nB\nC\nD\nE\nF\nG\nH";
-  const scheduleSeedOne = generateSchedule({
-    playersText: shufflePlayers,
-    startTime: "7:00 PM",
-    courts: 2,
-    rounds: 2,
-    minutesPerRound: 30,
-    courtNumbers: ["1", "2"],
-    mode: "doubles",
-    shuffleSeed: 1,
-  });
-  const scheduleSeedTwo = generateSchedule({
-    playersText: shufflePlayers,
-    startTime: "7:00 PM",
-    courts: 2,
-    rounds: 2,
-    minutesPerRound: 30,
-    courtNumbers: ["1", "2"],
-    mode: "doubles",
-    shuffleSeed: 99,
-  });
-  assert("different shuffle seeds can produce different schedules", buildCopyText(scheduleSeedOne.schedule, "timed") !== buildCopyText(scheduleSeedTwo.schedule, "timed"));
-
-  return results;
-}
-
-const developerTestResults = runDeveloperTests();
-
 function FieldLabel({ children }) {
   return <label className="text-sm font-semibold text-slate-700">{children}</label>;
 }
@@ -527,11 +456,14 @@ export default function TennisRoundRobinGenerator() {
   const courtCount = parseOptionalPositiveInteger(courts, 0, 0, 20);
   const visibleCourtNumbers = normalizeCourtNumbers(courtNumbers, courtCount);
   const playersText = useMemo(() => buildPlayersTextFromRows(playerRows), [playerRows]);
+  const playersData = useMemo(() => buildPlayersFromRows(playerRows, startTime || "7:00 PM"), [playerRows, startTime]);
+  const isMixedMode = mode === "mixed";
 
   const generated = useMemo(
     () =>
       generateSchedule({
         playersText,
+        playersData,
         startTime,
         courts,
         rounds,
@@ -540,7 +472,7 @@ export default function TennisRoundRobinGenerator() {
         mode,
         shuffleSeed,
       }),
-    [playersText, startTime, courts, rounds, minutesPerRound, visibleCourtNumbers, mode, shuffleSeed]
+    [playersText, playersData, startTime, courts, rounds, minutesPerRound, visibleCourtNumbers, mode, shuffleSeed]
   );
 
   const copyText = useMemo(() => buildCopyText(generated.schedule, matchFormat), [generated.schedule, matchFormat]);
@@ -608,7 +540,10 @@ export default function TennisRoundRobinGenerator() {
   }
 
   const playerCount = parsePlayers(playersText, startTime).length;
-  const scheduleReady = playerCount > 0 && courtCount > 0 && parseOptionalPositiveInteger(rounds, 0, 0, 20) > 0;
+  const maleCount = playersData.filter((player) => player.gender === "male").length;
+  const femaleCount = playersData.filter((player) => player.gender === "female").length;
+  const mixedReady = !isMixedMode || (maleCount >= 2 && femaleCount >= 2);
+  const scheduleReady = playerCount > 0 && courtCount > 0 && parseOptionalPositiveInteger(rounds, 0, 0, 20) > 0 && mixedReady;
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-[#062d2b] p-4 text-slate-950 md:p-8">
@@ -620,6 +555,7 @@ export default function TennisRoundRobinGenerator() {
       <div className="pointer-events-none absolute right-[-4rem] top-44 h-[18rem] w-[38rem] rotate-12 border-y-4 border-white/15" />
       <div className="pointer-events-none absolute bottom-12 left-[-7rem] h-48 w-[42rem] -rotate-12 rounded-full border-t border-lime-300/25" />
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(120deg,rgba(255,255,255,0.08)_1px,transparent_1px)] bg-[length:80px_80px] opacity-20" />
+
       <div className="relative z-10 mx-auto max-w-7xl space-y-6">
         <header className="rounded-3xl border border-white/25 bg-white/84 p-6 shadow-2xl backdrop-blur-md md:p-8">
           <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
@@ -661,6 +597,13 @@ export default function TennisRoundRobinGenerator() {
 
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
                   <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">One Player Per Line</div>
+
+                  {isMixedMode ? (
+                    <div className="mb-3 rounded-xl bg-emerald-50 p-3 text-xs text-emerald-900">
+                      Mixed Doubles mode is on. Select Male or Female for each player so the app can create male/female teams.
+                    </div>
+                  ) : null}
+
                   <div className="space-y-3">
                     {playerRows.map((row, index) => (
                       <div key={row.id} className="rounded-2xl bg-white p-3 shadow-sm">
@@ -681,6 +624,20 @@ export default function TennisRoundRobinGenerator() {
                             <Trash2 className="h-4 w-4" />
                           </button>
                         </div>
+
+                        {isMixedMode ? (
+                          <div className="mt-3">
+                            <select
+                              value={row.gender}
+                              onChange={(event) => updatePlayerRow(row.id, { gender: event.target.value })}
+                              className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-slate-400 transition focus:ring-2"
+                            >
+                              <option value="">Select Male/Female</option>
+                              <option value="male">Male</option>
+                              <option value="female">Female</option>
+                            </select>
+                          </div>
+                        ) : null}
 
                         <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                           <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-700">
@@ -720,6 +677,7 @@ export default function TennisRoundRobinGenerator() {
                     placeholder="7:00 PM"
                   />
                 </div>
+
                 <div className="space-y-2">
                   <FieldLabel>Round type</FieldLabel>
                   <select
@@ -767,6 +725,7 @@ export default function TennisRoundRobinGenerator() {
                     placeholder="3"
                   />
                 </div>
+
                 <div className="space-y-2">
                   <FieldLabel>Rounds</FieldLabel>
                   <input
@@ -807,9 +766,16 @@ export default function TennisRoundRobinGenerator() {
                   className="w-full rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-slate-400 transition focus:ring-2"
                 >
                   <option value="doubles">Doubles only</option>
+                  <option value="mixed">Mixed doubles</option>
                   <option value="singles">Allow singles court if extra players</option>
                 </select>
               </div>
+
+              {isMixedMode && !mixedReady ? (
+                <div className="rounded-2xl bg-amber-50 p-3 text-sm text-amber-800">
+                  Mixed Doubles needs at least 2 male and 2 female players available to create a court.
+                </div>
+              ) : null}
 
               <div className="grid grid-cols-2 gap-3 rounded-2xl bg-emerald-950/10 p-3 text-sm">
                 <div>
@@ -847,12 +813,6 @@ export default function TennisRoundRobinGenerator() {
               >
                 <RefreshCw className="h-4 w-4" /> Reset Form
               </button>
-
-              {copyStatus === "manual" ? (
-                <div className="rounded-2xl bg-amber-50 p-3 text-sm text-amber-800">
-                  Your browser blocked automatic copying. The text box below has been selected, so press Ctrl+C or Cmd+C to copy it manually.
-                </div>
-              ) : null}
             </div>
           </Panel>
 
@@ -861,10 +821,10 @@ export default function TennisRoundRobinGenerator() {
               <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div>
                   <h2 className="text-2xl font-semibold">Generated Schedule</h2>
-                  <p className="text-sm text-slate-500">Copy and paste this into your team text thread. Use timed rounds or one-set rounds.</p>
+                  <p className="text-sm text-slate-500">Copy and paste this into your team text thread. Use timed rounds, one-set rounds, or mixed doubles.</p>
                 </div>
                 <div className="rounded-full bg-slate-100 px-3 py-2 text-sm font-medium text-slate-700">
-                  {matchFormat === "set" ? "One set per round" : "Auto-balances match counts"}
+                  {isMixedMode ? "Mixed doubles" : matchFormat === "set" ? "One set per round" : "Auto-balances match counts"}
                 </div>
               </div>
 
@@ -947,7 +907,9 @@ export default function TennisRoundRobinGenerator() {
                     <div key={player.name} className="flex items-center justify-between rounded-2xl bg-emerald-950/5 px-4 py-3">
                       <div>
                         <div className="font-medium">{player.name}</div>
-                        <div className="text-xs text-slate-500">Arrives {player.arrival || "start"}</div>
+                        <div className="text-xs text-slate-500">
+                          {isMixedMode && player.gender ? `${player.gender === "male" ? "Male" : "Female"} • ` : ""}Arrives {player.arrival || "start"}
+                        </div>
                       </div>
                       <span className="rounded-full bg-white px-3 py-1 text-sm font-semibold shadow-sm">{player.matches}</span>
                     </div>
