@@ -1,0 +1,10 @@
+{
+  "rewrites": [{ "source": "/events/:path*", "destination": "/index.html" }],
+  "headers": [{
+    "source": "/events/:path*",
+    "headers": [
+      { "key": "X-Robots-Tag", "value": "noindex, nofollow" },
+      { "key": "Referrer-Policy", "value": "no-referrer" }
+    ]
+  }]
+}

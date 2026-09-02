@@ -1,6 +1,8 @@
 import { buildPlayersTextFromRows, buildPlayersFromRows, parseOptionalPositiveInteger, parsePlayers, generateSchedule, buildCopyText, MATCH_FORMATS, getMatchFormatLabel } from "./scheduler.mjs";
 import React, { useMemo, useRef, useState } from "react";
 import { Copy, Plus, RefreshCw, Shuffle, Trash2, Users } from "lucide-react";
+import { createSnapshot } from "./events.mjs";
+import { eventApi } from "./event-api.mjs";
 
 const createBlankPlayer = () => ({
   id:
@@ -13,7 +15,7 @@ const createBlankPlayer = () => ({
   arrival: "",
 });
 
-function copyTextToClipboard(text) {
+export function copyTextToClipboard(text) {
   if (navigator.clipboard && window.isSecureContext) {
     return navigator.clipboard.writeText(text);
   }
@@ -71,6 +73,10 @@ export default function TennisRoundRobinGenerator() {
   const [mode, setMode] = useState("doubles");
   const [copyStatus, setCopyStatus] = useState("idle");
   const [shuffleSeed, setShuffleSeed] = useState(1);
+  const [eventTitle, setEventTitle] = useState("");
+  const [publishing, setPublishing] = useState(false);
+  const [publishError, setPublishError] = useState("");
+  const publicationRef = useRef(null);
   const outputRef = useRef(null);
 
   const courtCount = parseOptionalPositiveInteger(courts, 0, 0, 20);
@@ -102,6 +108,23 @@ export default function TennisRoundRobinGenerator() {
   );
 
   const copyText = useMemo(() => buildCopyText(generated.schedule, matchFormat), [generated.schedule, matchFormat]);
+
+  async function publishEvent() {
+    if (publishing) return;
+    setPublishing(true);
+    setPublishError("");
+    try {
+      const snapshot = createSnapshot({ title: eventTitle, players: playersData, schedule: generated.schedule, matchFormat, lockedPairs });
+      const fingerprint = JSON.stringify(snapshot);
+      // Reuse the ID if a response was lost after the database committed.
+      if (publicationRef.current?.fingerprint !== fingerprint) publicationRef.current = { id: crypto.randomUUID(), fingerprint };
+      const { id } = await eventApi.publish(publicationRef.current.id, snapshot);
+      window.location.assign(`/events/${id}`);
+    } catch (error) {
+      setPublishError(error.message);
+      setPublishing(false);
+    }
+  }
 
   async function copySchedule() {
     if (!copyText.trim()) {
@@ -179,6 +202,9 @@ export default function TennisRoundRobinGenerator() {
     setMode("doubles");
     setCopyStatus("idle");
     setShuffleSeed(1);
+    setEventTitle("");
+    setPublishError("");
+    publicationRef.current = null;
   }
 
   const playerCount = parsePlayers(playersText, startTime).length;
@@ -195,7 +221,7 @@ export default function TennisRoundRobinGenerator() {
         <header className="tennis-header rounded-3xl p-6 shadow-2xl md:p-8">
           <h1 className="max-w-2xl text-3xl font-bold tracking-tight text-emerald-950 md:text-5xl">Tennis Round Robin Generator</h1>
           <p className="mt-3 max-w-xl text-base text-slate-700 md:text-lg">
-            Enter your players, courts, and round settings. Create a tennis schedule and copy it into your group chat.
+            Enter your players, courts, and round settings. Share a schedule or publish an event so everyone can enter results.
           </p>
         </header>
 
@@ -504,6 +530,17 @@ export default function TennisRoundRobinGenerator() {
           </Panel>
 
           <main className="space-y-6">
+            <Panel className="p-6">
+              <h2 className="text-xl font-semibold">Ready to play?</h2>
+              <p className="mt-2 text-sm text-slate-600">Publish this lineup to save it and get a shared results page. Anyone with the link can enter and correct scores—no account needed.</p>
+              <label className="mt-4 block text-sm font-semibold" htmlFor="event-title">Event name <span className="font-normal text-slate-500">(optional)</span></label>
+              <input id="event-title" maxLength={120} value={eventTitle} onChange={(event) => setEventTitle(event.target.value)} placeholder="Saturday morning tennis" className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm" />
+              <button type="button" onClick={publishEvent} disabled={publishing || !scheduleReady || !generated.schedule.some((round) => round.matches.length)} className="mt-4 w-full rounded-2xl bg-emerald-950 px-4 py-3 font-semibold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50">
+                {publishing ? "Publishing lineup…" : "Publish lineup & track results"}
+              </button>
+              <p className="mt-2 text-xs text-slate-500">Publishing fixes the lineup for this event. Changes to the generator are saved only when you publish a new event.</p>
+              {publishError && <p role="alert" className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{publishError}</p>}
+            </Panel>
             <Panel className="p-6">
               <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div>
