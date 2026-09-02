@@ -1,18 +1,5 @@
 import React, { useMemo, useRef, useState } from "react";
-import { Copy, Plus, RefreshCw, Shuffle, Trash2, Trophy, Users } from "lucide-react";
-
-const samplePlayers = `Troncoso, 7:30 PM
-Carter
-McNaull
-Davis
-Craven
-Dima
-Eric
-Sell
-Bradshaw
-Mullen
-Wright
-Speigner`;
+import { Copy, Plus, RefreshCw, Shuffle, Trash2, Users } from "lucide-react";
 
 const createBlankPlayer = () => ({
   id:
@@ -550,7 +537,6 @@ export default function TennisRoundRobinGenerator() {
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_80%_62%,rgba(210,255,45,0.35),transparent_10%),radial-gradient(circle_at_15%_18%,rgba(20,184,166,0.25),transparent_24%),linear-gradient(135deg,#052724_0%,#063d38_42%,#021817_100%)]" />
       <div className="pointer-events-none absolute -left-24 top-10 h-80 w-80 rounded-full bg-emerald-300/10 blur-3xl" />
       <div className="pointer-events-none absolute bottom-0 right-0 h-96 w-96 rounded-full bg-lime-300/15 blur-3xl" />
-      <div className="pointer-events-none absolute left-8 top-16 hidden text-[15rem] font-black leading-none text-white/[0.045] md:block">🦆</div>
       <div className="pointer-events-none absolute right-[-8rem] top-24 h-[32rem] w-[32rem] rotate-12 rounded-[4rem] border-[18px] border-white/10" />
       <div className="pointer-events-none absolute right-[-4rem] top-44 h-[18rem] w-[38rem] rotate-12 border-y-4 border-white/15" />
       <div className="pointer-events-none absolute bottom-12 left-[-7rem] h-48 w-[42rem] -rotate-12 rounded-full border-t border-lime-300/25" />
@@ -558,21 +544,10 @@ export default function TennisRoundRobinGenerator() {
 
       <div className="relative z-10 mx-auto max-w-7xl space-y-6">
         <header className="rounded-3xl border border-white/25 bg-white/84 p-6 shadow-2xl backdrop-blur-md md:p-8">
-          <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between">
-            <div>
-              <div className="mb-3 inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-700">
-                <Trophy className="h-4 w-4" /> Polo Mighty Ducks
-              </div>
-              <h1 className="max-w-3xl text-3xl font-bold tracking-tight md:text-5xl">Polo Mighty Ducks Round Robin Generator</h1>
-              <p className="mt-3 max-w-2xl text-base text-slate-600 md:text-lg">
-                Enter your players, court numbers, start time, and late arrivals. Get a clean doubles schedule that is easy to copy into a team text thread.
-              </p>
-            </div>
-            <div className="rounded-2xl bg-gradient-to-br from-emerald-950 to-slate-950 p-5 text-white shadow-xl">
-              <div className="text-sm text-lime-200/80">Built for</div>
-              <div className="text-2xl font-bold">Mighty clean lineups</div>
-            </div>
-          </div>
+          <h1 className="max-w-3xl text-3xl font-bold tracking-tight md:text-5xl">Tennis Round Robin Generator</h1>
+          <p className="mt-3 max-w-2xl text-base text-slate-600 md:text-lg">
+            Enter your players, courts, and round settings. Create a tennis schedule and copy it into your group chat.
+          </p>
         </header>
 
         <div className="grid gap-6 lg:grid-cols-[460px_1fr]">
@@ -821,7 +796,7 @@ export default function TennisRoundRobinGenerator() {
               <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div>
                   <h2 className="text-2xl font-semibold">Generated Schedule</h2>
-                  <p className="text-sm text-slate-500">Copy and paste this into your team text thread. Use timed rounds, one-set rounds, or mixed doubles.</p>
+                  <p className="text-sm text-slate-500">Copy and paste this into your group chat. Use timed rounds, one-set rounds, or mixed doubles.</p>
                 </div>
                 <div className="rounded-full bg-slate-100 px-3 py-2 text-sm font-medium text-slate-700">
                   {isMixedMode ? "Mixed doubles" : matchFormat === "set" ? "One set per round" : "Auto-balances match counts"}
