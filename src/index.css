@@ -6,4 +6,67 @@ html, body, #root {
 
 body {
   margin: 0;
+  background: #075642;
+}
+
+.tennis-app {
+  isolation: isolate;
+  background: #075642;
+}
+
+.tennis-backdrop {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-color: #075642;
+  background-image:
+    linear-gradient(rgba(0, 49, 32, 0.08), rgba(0, 37, 29, 0.22)),
+    url("/tennis-court-background.webp");
+  background-size: cover;
+  background-position: center;
+}
+
+.tennis-header {
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-top: 5px solid #d8f541;
+  background-color: #f7fff9;
+  background-image:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.96) 52%, rgba(255, 255, 255, 0.12) 82%),
+    url("/tennis-court-background.webp");
+  background-size: cover;
+  background-position: right 18%;
+}
+
+.tennis-panel {
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.95);
+}
+
+@media (max-width: 767px) {
+  .tennis-backdrop {
+    background-position: 72% center;
+  }
+
+  .tennis-header {
+    background-image:
+      linear-gradient(90deg, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.95) 55%, rgba(255, 255, 255, 0.72) 100%),
+      url("/tennis-court-background.webp");
+    background-position: right top;
+  }
+}
+
+@media print {
+  .tennis-app {
+    background: white;
+  }
+
+  .tennis-backdrop {
+    display: none;
+  }
+
+  .tennis-header,
+  .tennis-panel {
+    background: white;
+    box-shadow: none;
+  }
 }
