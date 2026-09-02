@@ -50,7 +50,7 @@ function FieldLabel({ children }) {
 }
 
 function Panel({ children, className = "" }) {
-  return <div className={`rounded-3xl border border-white/25 bg-white/82 shadow-2xl backdrop-blur-md ${className}`}>{children}</div>;
+  return <div className={`tennis-panel rounded-3xl shadow-2xl ${className}`}>{children}</div>;
 }
 
 function normalizeCourtNumbers(existingNumbers, courtCount) {
@@ -188,19 +188,13 @@ export default function TennisRoundRobinGenerator() {
   const scheduleReady = playerCount > 0 && courtCount > 0 && parseOptionalPositiveInteger(rounds, 0, 0, 20) > 0 && mixedReady && generated.errors.length === 0;
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#062d2b] p-4 text-slate-950 md:p-8">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_80%_62%,rgba(210,255,45,0.35),transparent_10%),radial-gradient(circle_at_15%_18%,rgba(20,184,166,0.25),transparent_24%),linear-gradient(135deg,#052724_0%,#063d38_42%,#021817_100%)]" />
-      <div className="pointer-events-none absolute -left-24 top-10 h-80 w-80 rounded-full bg-emerald-300/10 blur-3xl" />
-      <div className="pointer-events-none absolute bottom-0 right-0 h-96 w-96 rounded-full bg-lime-300/15 blur-3xl" />
-      <div className="pointer-events-none absolute right-[-8rem] top-24 h-[32rem] w-[32rem] rotate-12 rounded-[4rem] border-[18px] border-white/10" />
-      <div className="pointer-events-none absolute right-[-4rem] top-44 h-[18rem] w-[38rem] rotate-12 border-y-4 border-white/15" />
-      <div className="pointer-events-none absolute bottom-12 left-[-7rem] h-48 w-[42rem] -rotate-12 rounded-full border-t border-lime-300/25" />
-      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(120deg,rgba(255,255,255,0.08)_1px,transparent_1px)] bg-[length:80px_80px] opacity-20" />
+    <div className="tennis-app relative min-h-screen overflow-hidden p-4 text-slate-950 md:p-8">
+      <div className="tennis-backdrop" aria-hidden="true" />
 
       <div className="relative z-10 mx-auto max-w-7xl space-y-6">
-        <header className="rounded-3xl border border-white/25 bg-white/84 p-6 shadow-2xl backdrop-blur-md md:p-8">
-          <h1 className="max-w-3xl text-3xl font-bold tracking-tight md:text-5xl">Tennis Round Robin Generator</h1>
-          <p className="mt-3 max-w-2xl text-base text-slate-600 md:text-lg">
+        <header className="tennis-header rounded-3xl p-6 shadow-2xl md:p-8">
+          <h1 className="max-w-2xl text-3xl font-bold tracking-tight text-emerald-950 md:text-5xl">Tennis Round Robin Generator</h1>
+          <p className="mt-3 max-w-xl text-base text-slate-700 md:text-lg">
             Enter your players, courts, and round settings. Create a tennis schedule and copy it into your group chat.
           </p>
         </header>
