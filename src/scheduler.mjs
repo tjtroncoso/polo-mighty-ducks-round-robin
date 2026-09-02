@@ -1,12 +1,15 @@
 export const MATCH_FORMATS = [
   { value: "timed", label: "Timed", description: "Play until the round timer ends." },
-  { value: "games3", label: "First to 3 games", description: "The first side to win 3 games wins the round." },
-  { value: "games4", label: "First to 4 games", description: "The first side to win 4 games wins the round." },
+  { value: "games", label: "First to", description: "Play until one side wins your selected number of games." },
   { value: "set", label: "Full Set", description: "Play one full set per round." },
   { value: "match", label: "Full Match", description: "Play a full match per round using your group's agreed scoring." },
 ];
 
-export function getMatchFormatLabel(value) {
+export function getMatchFormatLabel(value, gamesToWin = 3) {
+  if (value === "games") {
+    const games = parsePositiveInteger(gamesToWin, 3, 1, 99);
+    return `First to ${games} ${games === 1 ? "game" : "games"}`;
+  }
   return (MATCH_FORMATS.find((format) => format.value === value) || MATCH_FORMATS[0]).label;
 }
 
@@ -270,7 +273,7 @@ function makeCourtList(courtNumbers, courtCount) {
   });
 }
 
-export function generateSchedule({ playersText, playersData, startTime, courts, rounds, minutesPerRound, estimatedMinutesPerRound = 30, courtNumbers, mode, lockedPairs = [], matchFormat = "timed", shuffleSeed = 1 }) {
+export function generateSchedule({ playersText, playersData, startTime, courts, rounds, minutesPerRound, estimatedMinutesPerRound = 30, gamesToWin = 3, courtNumbers, mode, lockedPairs = [], matchFormat = "timed", shuffleSeed = 1 }) {
   const safeCourts = parseOptionalPositiveInteger(courts, 0, 0, 20);
   const safeRounds = parseOptionalPositiveInteger(rounds, 0, 0, 20);
   const safeMinutesPerRound = parseOptionalPositiveInteger(matchFormat === "timed" ? minutesPerRound : estimatedMinutesPerRound, 30, 5, 180);
@@ -377,6 +380,7 @@ export function generateSchedule({ playersText, playersData, startTime, courts, 
       round: roundIndex + 1,
       time: formatRoundTime(startMinutes, roundIndex, safeMinutesPerRound),
       minutesPerRound: safeMinutesPerRound,
+      gamesToWin: parsePositiveInteger(gamesToWin, 3, 1, 99),
       arrivalTimesEstimated: matchFormat !== "timed" && players.some((player) => player.arrivalMinutes > startMinutes),
       matches,
       sitOuts,
@@ -402,7 +406,7 @@ export function buildCopyText(schedule, matchFormat = "timed") {
 
   const text = schedule
     .map((round) => {
-      const roundLabel = `Round ${round.round} - ${matchFormat === "timed" ? `${round.time} (Timed: ${round.minutesPerRound} min)` : getMatchFormatLabel(matchFormat)}`;
+      const roundLabel = `Round ${round.round} - ${matchFormat === "timed" ? `${round.time} (Timed: ${round.minutesPerRound} min)` : getMatchFormatLabel(matchFormat, round.gamesToWin)}`;
       const lines = [roundLabel];
 
       round.matches.forEach((match) => {

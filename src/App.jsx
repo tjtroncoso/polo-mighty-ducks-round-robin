@@ -65,6 +65,7 @@ export default function TennisRoundRobinGenerator() {
   const [minutesPerRound, setMinutesPerRound] = useState("");
   const [estimatedMinutesPerRound, setEstimatedMinutesPerRound] = useState("30");
   const [matchFormat, setMatchFormat] = useState("timed");
+  const [gamesToWin, setGamesToWin] = useState("3");
   const [lockedPairs, setLockedPairs] = useState([]);
   const [courtNumbers, setCourtNumbers] = useState([]);
   const [mode, setMode] = useState("doubles");
@@ -91,12 +92,13 @@ export default function TennisRoundRobinGenerator() {
         minutesPerRound,
         estimatedMinutesPerRound,
         matchFormat,
+        gamesToWin,
         lockedPairs,
         courtNumbers: visibleCourtNumbers,
         mode,
         shuffleSeed,
       }),
-    [playersText, playersData, startTime, courts, rounds, minutesPerRound, estimatedMinutesPerRound, matchFormat, lockedPairs, visibleCourtNumbers, mode, shuffleSeed]
+    [playersText, playersData, startTime, courts, rounds, minutesPerRound, estimatedMinutesPerRound, matchFormat, gamesToWin, lockedPairs, visibleCourtNumbers, mode, shuffleSeed]
   );
 
   const copyText = useMemo(() => buildCopyText(generated.schedule, matchFormat), [generated.schedule, matchFormat]);
@@ -173,6 +175,7 @@ export default function TennisRoundRobinGenerator() {
     setLockedPairs([]);
     setCourtNumbers([]);
     setMatchFormat("timed");
+    setGamesToWin("3");
     setMode("doubles");
     setCopyStatus("idle");
     setShuffleSeed(1);
@@ -344,6 +347,24 @@ export default function TennisRoundRobinGenerator() {
                 </div>
               </div>
 
+              {matchFormat === "games" ? (
+                <div className="space-y-2">
+                  <label htmlFor="games-to-win" className="text-sm font-semibold text-slate-700">Games to win</label>
+                  <input
+                    id="games-to-win"
+                    type="number"
+                    min="1"
+                    max="99"
+                    step="1"
+                    value={gamesToWin}
+                    onChange={(event) => setGamesToWin(event.target.value)}
+                    onBlur={() => setGamesToWin(String(parseOptionalPositiveInteger(gamesToWin, 3, 1, 99)))}
+                    className="w-full rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-slate-400 transition focus:ring-2"
+                    placeholder="3"
+                  />
+                </div>
+              ) : null}
+
               {matchFormat === "timed" ? (
                 <div className="space-y-2">
                   <FieldLabel>Minutes / round</FieldLabel>
@@ -496,7 +517,7 @@ export default function TennisRoundRobinGenerator() {
                   <p className="text-sm text-slate-500">Copy and paste this into your group chat. Locked partners stay together while other partners rotate.</p>
                 </div>
                 <div className="rounded-full bg-slate-100 px-3 py-2 text-sm font-medium text-slate-700">
-                  {isMixedMode ? "Mixed doubles · " : ""}{getMatchFormatLabel(matchFormat)}
+                  {isMixedMode ? "Mixed doubles · " : ""}{getMatchFormatLabel(matchFormat, gamesToWin)}
                 </div>
               </div>
 
@@ -530,7 +551,7 @@ export default function TennisRoundRobinGenerator() {
                       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                         <h3 className="text-lg font-bold">Round {round.round}</h3>
                         <span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-700">
-                          {matchFormat === "timed" ? `${round.time} · ${round.minutesPerRound} min` : getMatchFormatLabel(matchFormat)}
+                          {matchFormat === "timed" ? `${round.time} · ${round.minutesPerRound} min` : getMatchFormatLabel(matchFormat, round.gamesToWin)}
                         </span>
                       </div>
 

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildPlayersFromRows, generateSchedule, buildCopyText, MATCH_FORMATS } from "./scheduler.mjs";
+import { buildPlayersFromRows, generateSchedule, buildCopyText, MATCH_FORMATS, getMatchFormatLabel } from "./scheduler.mjs";
 
 function makePlayers(count) {
   return Array.from({ length: count }, (_, index) => ({
@@ -128,18 +128,21 @@ test("unlocking a pairing permits partner rotation again", () => {
   assert.ok(teams.some((pair) => pair.some((player) => player.id === "p0") && !pair.some((player) => player.id === "p1")));
 });
 
-for (const format of MATCH_FORMATS) {
-  test(`${format.label}: copied rounds use the chosen format and correct arrival planning`, () => {
+for (const format of MATCH_FORMATS.flatMap((format) => format.value === "games"
+  ? [1, 3, 4, 7].map((gamesToWin) => ({ ...format, gamesToWin })) : [format])) {
+  const label = getMatchFormatLabel(format.value, format.gamesToWin);
+  test(`${label}: copied rounds use the chosen format and correct arrival planning`, () => {
     const players = makePlayers(4);
     players[1] = { ...players[1], arrival: "7:30 PM", arrivalMinutes: 19 * 60 + 30 };
-    const result = schedule({ playersData: players, matchFormat: format.value, minutesPerRound: 60, estimatedMinutesPerRound: 15 });
+    const result = schedule({ playersData: players, matchFormat: format.value, gamesToWin: format.gamesToWin, minutesPerRound: 60, estimatedMinutesPerRound: 15 });
     const text = buildCopyText(result.schedule, format.value);
     if (format.value === "timed") {
       assert.match(text, /Round 1 - 7:00 PM \(Timed: 60 min\)/);
       assert.equal(result.schedule[1].notArrived.length, 0);
       assert.doesNotMatch(text, /estimated/);
     } else {
-      assert.ok(text.includes(`Round 1 - ${format.label}`));
+      assert.ok(text.includes(`Round 1 - ${label}\n`));
+      if (format.value === "games") assert.equal(result.schedule[0].gamesToWin, format.gamesToWin);
       assert.doesNotMatch(text, /Round \d+ - \d/);
       assert.match(text, /estimated 15 minutes per round/);
       assert.equal(result.schedule[1].notArrived.length, 1);
