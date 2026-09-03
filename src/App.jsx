@@ -3,6 +3,7 @@ import React, { useMemo, useRef, useState } from "react";
 import { Copy, Plus, RefreshCw, Shuffle, Trash2, Users } from "lucide-react";
 import { createSnapshot } from "./events.mjs";
 import { eventApi } from "./event-api.mjs";
+import { getSetupIssues } from "./setup-status.mjs";
 
 const createBlankPlayer = () => ({
   id:
@@ -211,7 +212,19 @@ export default function TennisRoundRobinGenerator() {
   const maleCount = playersData.filter((player) => player.gender === "male").length;
   const femaleCount = playersData.filter((player) => player.gender === "female").length;
   const mixedReady = !isMixedMode || (maleCount >= 2 && femaleCount >= 2);
-  const scheduleReady = playerCount > 0 && courtCount > 0 && parseOptionalPositiveInteger(rounds, 0, 0, 20) > 0 && mixedReady && generated.errors.length === 0;
+  const setupIssues = getSetupIssues({ playerRows, startTime, matchFormat, minutesPerRound, gamesToWin, courts, rounds, mode });
+  const hasPlayableMatch = generated.schedule.some((round) => round.matches.length > 0);
+  if (setupIssues.length === 0 && generated.errors.length === 0 && !hasPlayableMatch) {
+    setupIssues.push({ targetId: "players-section", label: "No playable match—check arrival times and locked pairs" });
+  }
+  const scheduleReady = setupIssues.length === 0 && generated.errors.length === 0 && mixedReady && hasPlayableMatch;
+
+  function focusSetupField(targetId) {
+    const target = document.getElementById(targetId);
+    if (!target) return;
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+    window.setTimeout(() => target.focus({ preventScroll: true }), 350);
+  }
 
   return (
     <div className="tennis-app relative min-h-screen overflow-hidden p-4 text-slate-950 md:p-8">
@@ -233,10 +246,11 @@ export default function TennisRoundRobinGenerator() {
             </div>
 
             <div className="space-y-5">
-              <div className="space-y-3">
+              <div id="players-section" className="space-y-3" tabIndex={-1}>
                 <div className="flex items-center justify-between gap-3">
                   <FieldLabel>Players</FieldLabel>
                   <button
+                    id="add-player"
                     type="button"
                     onClick={addPlayerRow}
                     className="inline-flex items-center gap-1 rounded-full bg-emerald-950 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-800"
@@ -260,6 +274,7 @@ export default function TennisRoundRobinGenerator() {
                         <div className="flex items-center gap-2">
                           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-sm font-bold text-slate-600">{index + 1}</div>
                           <input
+                            id={`player-name-${row.id}`}
                             value={row.name}
                             onChange={(event) => updatePlayerRow(row.id, { name: event.target.value })}
                             className="min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-slate-400 transition focus:ring-2"
@@ -279,6 +294,7 @@ export default function TennisRoundRobinGenerator() {
                         {isMixedMode ? (
                           <div className="mt-3">
                             <select
+                              id={`gender-${row.id}`}
                               value={row.gender}
                               aria-label={`Player ${index + 1} gender`}
                               onChange={(event) => updatePlayerRow(row.id, { gender: event.target.value })}
@@ -317,6 +333,7 @@ export default function TennisRoundRobinGenerator() {
                         <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                           <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-700">
                             <input
+                              id={`arrival-${row.id}`}
                               type="checkbox"
                               checked={row.isLate}
                               onChange={(event) => updatePlayerRow(row.id, { isLate: event.target.checked, arrival: event.target.checked ? row.arrival : "" })}
@@ -347,6 +364,7 @@ export default function TennisRoundRobinGenerator() {
                 <div className="space-y-2">
                   <FieldLabel>Start time</FieldLabel>
                   <input
+                    id="start-time"
                     value={startTime}
                     onChange={(event) => setStartTime(event.target.value)}
                     className="w-full rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-slate-400 transition focus:ring-2"
@@ -389,6 +407,7 @@ export default function TennisRoundRobinGenerator() {
                 <div className="space-y-2">
                   <FieldLabel>Minutes / round</FieldLabel>
                   <input
+                    id="minutes-per-round"
                     type="number"
                     min="5"
                     max="180"
@@ -425,6 +444,7 @@ export default function TennisRoundRobinGenerator() {
                 <div className="space-y-2">
                   <FieldLabel>Number of courts</FieldLabel>
                   <input
+                    id="courts"
                     type="number"
                     min="0"
                     value={courts}
@@ -441,6 +461,7 @@ export default function TennisRoundRobinGenerator() {
                 <div className="space-y-2">
                   <FieldLabel>Rounds</FieldLabel>
                   <input
+                    id="rounds"
                     type="number"
                     min="0"
                     value={rounds}
@@ -497,9 +518,32 @@ export default function TennisRoundRobinGenerator() {
                 </div>
                 <div>
                   <div className="text-slate-500">Status</div>
-                  <div className="text-lg font-bold">{generated.errors.length ? "Pairing issue" : scheduleReady ? "Ready" : "Missing Info"}</div>
+                  <div className="text-lg font-bold">{generated.errors.length ? "Pairing issue" : scheduleReady ? "Ready" : "Needs attention"}</div>
                 </div>
               </div>
+
+              {!scheduleReady ? (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950" role="status" aria-live="polite">
+                  <div className="font-bold">Complete these items:</div>
+                  <ul className="mt-2 space-y-1.5">
+                    {setupIssues.map((issue) => (
+                      <li key={`${issue.targetId}-${issue.label}`}>
+                        <button type="button" onClick={() => focusSetupField(issue.targetId)} className="min-h-8 text-left font-medium underline decoration-amber-500 underline-offset-2 hover:text-emerald-900">
+                          {issue.label}
+                        </button>
+                      </li>
+                    ))}
+                    {generated.errors.map((error, index) => (
+                      <li key={`${index}-${error}`}>
+                        <button type="button" onClick={() => focusSetupField("players-section")} className="min-h-8 text-left font-medium underline decoration-amber-500 underline-offset-2 hover:text-emerald-900">
+                          {error}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-2 text-xs text-amber-800">Select an item to jump to the field that needs attention.</p>
+                </div>
+              ) : null}
 
               <div className="grid grid-cols-2 gap-3 pt-1">
                 <button
