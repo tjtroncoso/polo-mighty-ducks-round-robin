@@ -5,7 +5,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
-import { createEventStore, getEventStore } from "./store.mjs";
+import { createEventStore, getDatabaseUrl, getEventStore } from "./store.mjs";
 import { createEventHandler } from "./handler.mjs";
 
 function lineup() {
@@ -134,4 +134,28 @@ test("missing database configuration returns a truthful unavailable response", a
     assert.equal(response.status, 503);
     assert.match((await response.json()).error, /connect the event database/);
   } finally { if (original !== undefined) process.env.DATABASE_URL = original; }
+});
+
+test("paid-beta preview never falls back to the production database", () => {
+  const production = "postgresql://production.example/tennis";
+  const preview = "postgresql://preview.example/tennis";
+
+  assert.equal(getDatabaseUrl({ DATABASE_URL: production }), production);
+  assert.equal(getDatabaseUrl({
+    VERCEL_ENV: "preview",
+    VERCEL_GIT_COMMIT_REF: "another-branch",
+    DATABASE_URL: production,
+    PAID_BETA_DATABASE_URL: preview,
+  }), production);
+  assert.equal(getDatabaseUrl({
+    VERCEL_ENV: "preview",
+    VERCEL_GIT_COMMIT_REF: "paid-beta",
+    DATABASE_URL: production,
+    PAID_BETA_DATABASE_URL: preview,
+  }), preview);
+  assert.equal(getDatabaseUrl({
+    VERCEL_ENV: "preview",
+    VERCEL_GIT_COMMIT_REF: "paid-beta",
+    DATABASE_URL: production,
+  }), undefined);
 });

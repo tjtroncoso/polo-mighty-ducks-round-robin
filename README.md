@@ -50,8 +50,9 @@ Output directory: dist
 Shared results need a database; schedule generation and copying work without one.
 
 1. Open this project's **Storage** tab in Vercel and create or connect a **Neon Postgres** database through the [Vercel Marketplace](https://vercel.com/marketplace/neon). Choose the plan and region in the dashboard.
-2. Connect the database to this project for **Production** and **Preview** (and Development if needed). Confirm it supplies the server environment variable `DATABASE_URL`. Keep preview/development data separate from production using the integration's database branches or separate databases.
-3. Redeploy after connecting the database, or merge this feature after the connection is in place. Environment variables apply to new deployments.
+2. Connect the production database as the server environment variable `DATABASE_URL`.
+3. Create a separate Neon database or branch for the paid beta and connect it as `PAID_BETA_DATABASE_URL`, scoped only to the Vercel **Preview** environment and the `paid-beta` Git branch. The beta deliberately refuses to fall back to `DATABASE_URL`.
+4. Redeploy after connecting the database, or merge this feature after the connection is in place. Environment variables apply to new deployments.
 
 The API creates its two tables (`tennis_events`, `tennis_results`) automatically on first use, using a PostgreSQL advisory lock so simultaneous function starts are safe. No manual SQL migration is needed for initial setup. The connection role needs permission to create these tables. Database errors fail explicitly; the app never substitutes local-only results or reports a successful publish without a database write.
 

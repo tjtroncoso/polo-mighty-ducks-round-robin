@@ -70,14 +70,22 @@ export function createEventStore(database) {
 }
 
 let productionStore;
+
+export function getDatabaseUrl(environment = process.env) {
+  const isPaidBetaPreview = environment.VERCEL_ENV === "preview"
+    && environment.VERCEL_GIT_COMMIT_REF === "paid-beta";
+  return isPaidBetaPreview ? environment.PAID_BETA_DATABASE_URL : environment.DATABASE_URL;
+}
+
 export function getEventStore() {
-  if (!process.env.DATABASE_URL) {
+  const databaseUrl = getDatabaseUrl();
+  if (!databaseUrl) {
     const error = new Error("Shared results are not available yet. The organizer needs to connect the event database in Vercel.");
     error.status = 503;
     throw error;
   }
   if (!productionStore) {
-    const sql = neon(process.env.DATABASE_URL);
+    const sql = neon(databaseUrl);
     productionStore = createEventStore({
       query: (query, parameters) => sql.query(query, parameters),
       transaction: (statements) => sql.transaction(statements.map(([query, parameters]) => sql.query(query, parameters))),
