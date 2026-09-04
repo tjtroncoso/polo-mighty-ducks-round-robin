@@ -73,7 +73,7 @@ let productionStore;
 
 export function getDatabaseUrl(environment = process.env) {
   return environment.VERCEL_ENV === "preview"
-    ? environment.PAID_BETA_DATABASE_URL
+    ? environment.PAID_BETA_DATABASE_URL || environment.PAID_BETA_DATABASE_URL_DATABASE_URL
     : environment.DATABASE_URL;
 }
 

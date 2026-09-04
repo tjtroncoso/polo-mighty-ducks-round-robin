@@ -155,6 +155,11 @@ test("preview deployments never fall back to the production database", () => {
   }), preview);
   assert.equal(getDatabaseUrl({
     VERCEL_ENV: "preview",
+    DATABASE_URL: production,
+    PAID_BETA_DATABASE_URL_DATABASE_URL: preview,
+  }), preview);
+  assert.equal(getDatabaseUrl({
+    VERCEL_ENV: "preview",
     VERCEL_GIT_COMMIT_REF: "paid-beta",
     DATABASE_URL: production,
   }), undefined);
