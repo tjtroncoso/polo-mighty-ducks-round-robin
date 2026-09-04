@@ -26,8 +26,8 @@ export function getSetupIssues({ playerRows, startTime, matchFormat, minutesPerR
   if (matchFormat === "games" && !validInteger(gamesToWin, 1, 99)) {
     issues.push({ targetId: "games-to-win", label: "Enter games to win (1–99)" });
   }
-  if (!validInteger(courts, 1, 20)) issues.push({ targetId: "courts", label: "Enter the number of courts (1–20)" });
-  if (!validInteger(rounds, 1, 20)) issues.push({ targetId: "rounds", label: "Enter the number of rounds (1–20)" });
+  if (!validInteger(courts, 1, 50)) issues.push({ targetId: "courts", label: "Enter the number of courts (1–50)" });
+  if (!validInteger(rounds, 1, 50)) issues.push({ targetId: "rounds", label: "Enter the number of rounds (1–50)" });
 
   const lateWithoutTime = namedPlayers.find((row) => row.isLate && !row.arrival.trim());
   if (lateWithoutTime) {

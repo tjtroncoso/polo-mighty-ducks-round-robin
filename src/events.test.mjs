@@ -24,23 +24,24 @@ test("published snapshots work with all generator modes, locks, late players, an
   for (const mode of ["doubles", "mixed", "singles"]) {
     for (const matchFormat of ["timed", "games", "set", "match"]) {
       const players = buildPlayersFromRows(Array.from({ length: 10 }, (_, i) => ({ id: `id-${i}`, name: `Player ${i}`, gender: i % 2 ? "female" : "male", isLate: i === 1, arrival: "9:30 AM" })), "9:00 AM");
-      const lockedPairs = [["id-0", "id-1"]];
+      const lockedPairs = mode === "singles" ? [] : [["id-0", "id-1"]];
       const generated = generateSchedule({ playersData: players, startTime: "9:00 AM", courts: 3, rounds: 4, minutesPerRound: 20, matchFormat, mode, lockedPairs });
       assert.equal(generated.errors.length, 0);
       const snapshot = createSnapshot({ title: "", players, schedule: generated.schedule, matchFormat, lockedPairs });
       assert.equal(snapshot.title, "Tennis round robin");
       assert.equal(snapshot.rounds.length, 4);
       players[0].name = "Renamed later";
-      lockedPairs[0][0] = "changed";
+      if (lockedPairs.length) lockedPairs[0][0] = "changed";
       generated.schedule[0].matches[0].court = "Changed later";
       assert.equal(snapshot.players[0].name, "Player 0");
-      assert.equal(snapshot.lockedPairs[0][0], "id-0");
+      if (lockedPairs.length) assert.equal(snapshot.lockedPairs[0][0], "id-0");
+      else assert.deepEqual(snapshot.lockedPairs, []);
       assert.notEqual(snapshot.rounds[0].matches[0].court, "Changed later");
     }
   }
 });
 
-test("lineup validation rejects missing players, duplicate assignments, split locks, and excessive rounds", () => {
+test("lineup validation rejects missing players, duplicate assignments, split locks, and more than 50 rounds", () => {
   const bad = fixture();
   bad.rounds[0].matches[0].pairB[0] = "p1";
   assert.throws(() => validateSnapshot(bad), /twice/);
@@ -48,7 +49,7 @@ test("lineup validation rejects missing players, duplicate assignments, split lo
   missing.rounds[0].matches[0].pairB[0] = "unknown";
   assert.throws(() => validateSnapshot(missing), /unknown/);
   assert.throws(() => validateSnapshot(fixture({ lockedPairs: [["p1", "p2"]] })), /split/);
-  assert.throws(() => validateSnapshot(fixture({ rounds: Array(21).fill(fixture().rounds[0]) })), /1–20/);
+  assert.throws(() => validateSnapshot(fixture({ rounds: Array(51).fill(fixture().rounds[0]) })), /1–50/);
 });
 
 test("timed results allow draws; first-to needs the chosen target and rejects invalid numbers", () => {

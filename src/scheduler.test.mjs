@@ -85,13 +85,27 @@ test("a late partner beyond the last round is never replaced", () => {
   assert.ok(result.schedule.every((round) => round.matches.length === 0 && round.waitingForPartner.length === 1));
 });
 
-test("extra singles courts never split locked partners", () => {
+test("singles mode creates singles on every available court and ignores stale partner locks", () => {
   const players = makePlayers(6);
   const locks = [["p0", "p1"], ["p2", "p3"], ["p4", "p5"]];
-  const result = schedule({ playersData: players, lockedPairs: locks, mode: "singles" });
-  verifyRounds(result, players, locks);
-  assert.ok(result.schedule.every((round) => round.matches.length === 1 && round.matches[0].type === "Doubles"));
-  assert.ok(schedule({ playersData: players, mode: "singles" }).schedule.every((round) => round.matches.length === 2));
+  const result = schedule({ playersData: players, lockedPairs: locks, mode: "singles", courts: 3 });
+  verifyRounds(result, players, []);
+  assert.ok(result.schedule.every((round) => round.matches.length === 3));
+  assert.ok(result.schedule.every((round) => round.matches.every((match) => match.type === "Singles" && match.pairA.length === 1 && match.pairB.length === 1)));
+});
+
+test("singles mode rotates opponents and supports 50 courts and 50 rounds", () => {
+  const small = schedule({ playersData: makePlayers(4), mode: "singles", courts: 1, rounds: 6 });
+  const opponents = new Set();
+  for (const round of small.schedule) for (const match of round.matches) {
+    if (match.pairA[0].id === "p0") opponents.add(match.pairB[0].id);
+    if (match.pairB[0].id === "p0") opponents.add(match.pairA[0].id);
+  }
+  assert.ok(opponents.size > 1);
+
+  const large = schedule({ playersData: makePlayers(100), mode: "singles", courts: 50, rounds: 50 });
+  assert.equal(large.schedule.length, 50);
+  assert.ok(large.schedule.every((round) => round.matches.length === 50));
 });
 
 test("mixed mode reports incompatible locks instead of silently breaking them", () => {
@@ -120,6 +134,16 @@ test("row IDs preserve pairings when duplicate names are renamed or another row 
   assert.equal(new Set(players.map((player) => player.name)).size, players.length);
   const locks = [["p0", "p1"]];
   verifyRounds(schedule({ playersData: players, lockedPairs: locks }), players, locks);
+});
+
+test("time picker values are displayed as readable AM/PM arrival times", () => {
+  const players = buildPlayersFromRows([
+    { id: "p0", name: "Alex", gender: "", isLate: true, arrival: "19:30" },
+    { id: "p1", name: "Blair", gender: "", isLate: false, arrival: "" },
+  ], "19:00");
+  assert.equal(players[0].arrival, "7:30 PM");
+  assert.equal(players[0].arrivalMinutes, 19 * 60 + 30);
+  assert.equal(players[1].arrival, "7:00 PM");
 });
 
 test("unlocking a pairing permits partner rotation again", () => {

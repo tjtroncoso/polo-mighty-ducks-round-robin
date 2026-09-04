@@ -82,14 +82,14 @@ export function validateSnapshot(input) {
     return clean;
   });
   const matchIds = new Set();
-  const rounds = list(input.rounds, "Rounds", 1, 20).map((round, index) => {
+  const rounds = list(input.rounds, "Rounds", 1, 50).map((round, index) => {
     check(round?.number === index + 1, "Rounds must be in order.");
     const used = new Set();
     const assign = (entries) => entries.forEach((id) => {
       check(!used.has(id), "A player cannot appear twice in the same round.");
       used.add(id);
     });
-    const matches = list(round.matches, "Courts per round", 0, 20).map((match, matchIndex) => {
+    const matches = list(round.matches, "Courts per round", 0, 50).map((match, matchIndex) => {
       check(match?.id === `r${index + 1}-m${matchIndex + 1}`, "Invalid match ID.");
       matchIds.add(match.id);
       check(["Singles", "Doubles", "Mixed Doubles"].includes(match.type), "Invalid match type.");
