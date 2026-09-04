@@ -1,6 +1,7 @@
 import React from "react";
 import { ClerkProvider, SignInButton, UserButton, useAuth } from "@clerk/react";
 import App from "./App.jsx";
+import OrganizerInvite from "./OrganizerInvite.jsx";
 
 function AccountControls() {
   const { isLoaded, isSignedIn } = useAuth();
@@ -35,6 +36,14 @@ export function ClerkGeneratorRoot({ publishableKey }) {
   return (
     <ClerkProvider publishableKey={publishableKey}>
       <ClerkGenerator />
+    </ClerkProvider>
+  );
+}
+
+export function ClerkInviteRoot({ publishableKey, token }) {
+  return (
+    <ClerkProvider publishableKey={publishableKey}>
+      <OrganizerInvite token={token} />
     </ClerkProvider>
   );
 }

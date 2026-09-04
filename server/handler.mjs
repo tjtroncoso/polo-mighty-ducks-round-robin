@@ -38,7 +38,7 @@ export function createEventHandler(getStore, getOrganizerUserId = async () => nu
   return async function handle(request) {
     try {
       const url = new URL(request.url);
-      if (!["GET", "POST", "PUT"].includes(request.method)) return json({ error: "Method not allowed." }, 405);
+      if (!["GET", "POST", "PUT", "PATCH", "DELETE"].includes(request.method)) return json({ error: "Method not allowed." }, 405);
       if (request.method !== "GET") {
         const origin = request.headers.get("origin");
         if (origin && origin !== url.origin) return json({ error: "Open the event link to enter results." }, 403);
@@ -47,6 +47,25 @@ export function createEventHandler(getStore, getOrganizerUserId = async () => nu
         const ownerUserId = await getOrganizerUserId(request);
         if (!ownerUserId) return json({ error: "Sign in as an organizer before publishing an event." }, 401);
         const body = await readBody(request);
+        if (body?.action === "create_invite") {
+          if (!uuid.test(body.eventId || "") || !uuid.test(body.token || "")) throw new InputError("Invalid invitation.");
+          const invite = await getStore().createInvite(body.eventId, body.token, ownerUserId);
+          if (!invite) return json({ error: "Only the event owner can invite a co-organizer." }, 404);
+          return json(invite, 201);
+        }
+        if (body?.action === "claim_invite") {
+          if (!uuid.test(body.token || "")) throw new InputError("Invalid invitation.");
+          const eventId = await getStore().claimInvite(body.token, ownerUserId);
+          if (!eventId) return json({ error: "This invitation is invalid, expired, or already used." }, 404);
+          return json({ id: eventId });
+        }
+        if (body?.action === "duplicate") {
+          if (!uuid.test(body.sourceId || "") || !uuid.test(body.id || "")) throw new InputError("Invalid event ID.");
+          const duplicated = await getStore().duplicate(body.sourceId, body.id, ownerUserId);
+          if (duplicated === null) return json({ error: "Event not found in your organizer account." }, 404);
+          if (duplicated === false) return json({ error: "That duplicate already exists. Try again." }, 409);
+          return json({ id: duplicated.id }, 201);
+        }
         if (!uuid.test(body?.id)) throw new InputError("Invalid event ID.");
         const snapshot = validateSnapshot(body.snapshot);
         const created = await getStore().create(body.id, snapshot, ownerUserId);
@@ -61,6 +80,21 @@ export function createEventHandler(getStore, getOrganizerUserId = async () => nu
       const id = url.searchParams.get("id");
       if (!uuid.test(id || "")) return json({ error: "This event link is invalid." }, 404);
       const store = getStore();
+      if (request.method === "PATCH") {
+        const ownerUserId = await getOrganizerUserId(request);
+        if (!ownerUserId) return json({ error: "Sign in to manage this event." }, 401);
+        const body = await readBody(request);
+        if (!["archive", "restore"].includes(body?.action)) throw new InputError("Choose archive or restore.");
+        const archivedAt = await store.setArchived(id, ownerUserId, body.action === "archive");
+        if (archivedAt === undefined) return json({ error: "Event not found in your organizer account." }, 404);
+        return json({ archivedAt });
+      }
+      if (request.method === "DELETE") {
+        const ownerUserId = await getOrganizerUserId(request);
+        if (!ownerUserId) return json({ error: "Sign in to delete this event." }, 401);
+        if (!await store.deleteOwned(id, ownerUserId)) return json({ error: "Event not found in your organizer account." }, 404);
+        return json({ deleted: true });
+      }
       const event = await store.get(id);
       if (!event) return json({ error: "Event not found. Check that you have the complete event link." }, 404);
       if (request.method === "GET") return json(event);

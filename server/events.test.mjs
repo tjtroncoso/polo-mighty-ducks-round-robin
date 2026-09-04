@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { createEventStore, getDatabaseUrl, getEventStore } from "./store.mjs";
 import { createEventHandler } from "./handler.mjs";
+import { createRosterHandler } from "./roster-handler.mjs";
 
 function lineup() {
   return {
@@ -19,7 +20,7 @@ function lineup() {
   };
 }
 const score = (a, b, status = "completed") => ({ status, scores: [{ a, b, kind: "games" }] });
-let database, directory, store, handle;
+let database, directory, store, handle, rosterHandle;
 function adapter(db) {
   return {
     query: async (query, values) => (await db.query(query, values)).rows,
@@ -35,12 +36,18 @@ before(async () => {
   database = new PGlite(directory);
   store = createEventStore(adapter(database));
   handle = createEventHandler(() => store, async (request) => request.headers.get("x-test-user"));
+  rosterHandle = createRosterHandler(() => store, async (request) => request.headers.get("x-test-user"));
 });
 after(async () => { await database.close(); await rm(directory, { recursive: true, force: true }); });
 
 async function call(method, query = "", body, headers = {}) {
   const response = await handle(new Request(`https://tennis.example/api/events${query}`, { method, headers: { "Content-Type": "application/json", "X-Test-User": "organizer-one", ...headers }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }));
   return { status: response.status, body: await response.json(), headers: response.headers };
+}
+
+async function callRoster(method, query = "", requestBody, headers = {}) {
+  const response = await rosterHandle(new Request(`https://tennis.example/api/rosters${query}`, { method, headers: { "Content-Type": "application/json", "X-Test-User": "organizer-one", ...headers }, ...(requestBody === undefined ? {} : { body: JSON.stringify(requestBody) }) }));
+  return { status: response.status, body: await response.json() };
 }
 
 test("publishing requires an organizer account and My Events is private to its owner", async () => {
@@ -62,6 +69,67 @@ test("publishing requires an organizer account and My Events is private to its o
   const someoneElse = await call("GET", "?mine=1", undefined, { "X-Test-User": "organizer-two" });
   assert.equal(someoneElse.status, 200);
   assert.deepEqual(someoneElse.body.events, []);
+});
+
+test("organizers can duplicate, archive, restore, and permanently delete only their events", async () => {
+  const id = await publish();
+  await call("PUT", `?id=${id}&match=r1-m1`, { version: 0, result: score(4, 2) });
+  const archived = await call("PATCH", `?id=${id}`, { action: "archive" });
+  assert.equal(archived.status, 200);
+  assert.ok(archived.body.archivedAt);
+  assert.equal((await call("GET", `?id=${id}`)).status, 200, "archiving keeps the player link active");
+  const mine = await call("GET", "?mine=1");
+  const summary = mine.body.events.find((event) => event.id === id);
+  assert.equal(summary.completedMatches, 1);
+  assert.ok(summary.archivedAt);
+  assert.equal((await call("PATCH", `?id=${id}`, { action: "restore" })).body.archivedAt, null);
+
+  const duplicateId = randomUUID();
+  const duplicated = await call("POST", "", { action: "duplicate", sourceId: id, id: duplicateId });
+  assert.equal(duplicated.status, 201);
+  const copy = await call("GET", `?id=${duplicateId}`);
+  assert.equal(copy.body.snapshot.title, "Club tennis copy");
+  assert.deepEqual(copy.body.results, {});
+
+  assert.equal((await call("DELETE", `?id=${id}`, undefined, { "X-Test-User": "organizer-two" })).status, 404);
+  assert.equal((await call("DELETE", `?id=${id}`)).status, 200);
+  assert.equal((await call("GET", `?id=${id}`)).status, 404);
+});
+
+test("organizers can save, load, and delete reusable rosters without seeing another account", async () => {
+  const id = randomUUID();
+  const roster = {
+    id,
+    name: "Thursday regulars",
+    players: [
+      { id: "player-a", name: "Alex", gender: "male" },
+      { id: "player-b", name: "Bailey", gender: "female" },
+    ],
+  };
+  assert.equal((await callRoster("POST", "", roster)).status, 201);
+  const mine = await callRoster("GET");
+  assert.equal(mine.body.rosters[0].name, roster.name);
+  assert.deepEqual(mine.body.rosters[0].players, roster.players);
+  assert.deepEqual((await callRoster("GET", "", undefined, { "X-Test-User": "organizer-two" })).body.rosters, []);
+  assert.equal((await callRoster("DELETE", `?id=${id}`, undefined, { "X-Test-User": "organizer-two" })).status, 404);
+  assert.equal((await callRoster("DELETE", `?id=${id}`)).status, 200);
+  assert.deepEqual((await callRoster("GET")).body.rosters, []);
+});
+
+test("owners can invite a signed-in co-organizer without giving away archive or delete control", async () => {
+  const id = await publish();
+  const token = randomUUID();
+  const invite = await call("POST", "", { action: "create_invite", eventId: id, token });
+  assert.equal(invite.status, 201);
+  assert.ok(invite.body.expiresAt);
+  const claimed = await call("POST", "", { action: "claim_invite", token }, { "X-Test-User": "organizer-two" });
+  assert.equal(claimed.status, 200);
+  assert.equal(claimed.body.id, id);
+  const shared = await call("GET", "?mine=1", undefined, { "X-Test-User": "organizer-two" });
+  assert.equal(shared.body.events.find((event) => event.id === id).role, "co-organizer");
+  assert.equal((await call("PATCH", `?id=${id}`, { action: "archive" }, { "X-Test-User": "organizer-two" })).status, 404);
+  assert.equal((await call("DELETE", `?id=${id}`, undefined, { "X-Test-User": "organizer-two" })).status, 404);
+  assert.equal((await call("POST", "", { action: "claim_invite", token }, { "X-Test-User": "organizer-three" })).status, 404, "an invite works only once");
 });
 async function publish(snapshot = lineup()) {
   const id = randomUUID();

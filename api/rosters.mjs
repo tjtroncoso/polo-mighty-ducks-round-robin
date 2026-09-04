@@ -1,10 +1,8 @@
-import { createEventHandler } from "../server/handler.mjs";
 import { getOrganizerUserId } from "../server/auth.mjs";
+import { createRosterHandler } from "../server/roster-handler.mjs";
 import { getEventStore } from "../server/store.mjs";
 
-const handle = createEventHandler(getEventStore, getOrganizerUserId);
+const handle = createRosterHandler(getEventStore, getOrganizerUserId);
 export const GET = handle;
 export const POST = handle;
-export const PUT = handle;
-export const PATCH = handle;
 export const DELETE = handle;

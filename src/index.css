@@ -56,6 +56,10 @@ body {
 }
 
 @media print {
+  .print-hidden {
+    display: none !important;
+  }
+
   .tennis-app {
     background: white;
   }

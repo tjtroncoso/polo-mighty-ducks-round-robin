@@ -5,11 +5,18 @@ import App from "./App.jsx";
 import EventResults from "./EventResults.jsx";
 
 const eventPath = window.location.pathname.match(/^\/events\/([^/]+)\/?$/);
+const invitePath = window.location.pathname.match(/^\/join\/([^/]+)\/?$/);
 const publishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 const root = createRoot(document.getElementById("root"));
 
 if (eventPath) {
   root.render(<EventResults eventId={eventPath[1]} />);
+} else if (invitePath && publishableKey) {
+  import("./OrganizerAuth.jsx").then(({ ClerkInviteRoot }) => {
+    root.render(<ClerkInviteRoot publishableKey={publishableKey} token={invitePath[1]} />);
+  });
+} else if (invitePath) {
+  root.render(<div className="tennis-app min-h-screen p-8 text-white">Organizer login setup pending.</div>);
 } else if (publishableKey) {
   import("./OrganizerAuth.jsx").then(({ ClerkGeneratorRoot }) => {
     root.render(<ClerkGeneratorRoot publishableKey={publishableKey} />);

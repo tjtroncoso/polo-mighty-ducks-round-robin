@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { ArrowLeft, Check, Copy, Pencil, Plus, RefreshCw, Trophy, X } from "lucide-react";
+import { ArrowLeft, Check, Copy, Download, Pencil, Plus, Printer, RefreshCw, Trophy, X } from "lucide-react";
 import { copyTextToClipboard } from "./App.jsx";
 import { eventApi } from "./event-api.mjs";
+import { downloadEventCsv } from "./exports.mjs";
 import { buildStandings, mergeResults, resultOutcome, validateResult } from "./events.mjs";
 import { getMatchFormatLabel } from "./scheduler.mjs";
 
@@ -190,6 +191,12 @@ export default function EventResults({ eventId }) {
     catch { setCopyStatus("Select and copy the event link below."); }
   }
 
+  function exportCsv() {
+    if (!event) return;
+    downloadEventCsv(event);
+    setNotice("CSV export downloaded.");
+  }
+
   function saved(matchId, result) {
     setEvent((current) => ({ ...current, results: mergeResults(current.results, { [matchId]: result }) }));
     setNotice("Score updated. Standings are up to date.");
@@ -205,24 +212,24 @@ export default function EventResults({ eventId }) {
     <div className="tennis-backdrop" aria-hidden="true" />
     <main className="relative z-10 mx-auto max-w-5xl space-y-6">
       <header className="tennis-header rounded-3xl p-6 shadow-2xl md:p-8">
-        <a href="/" className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-emerald-900"><ArrowLeft size={16} /> Create another event</a>
+        <a href="/" className="print-hidden inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-emerald-900"><ArrowLeft size={16} /> Create another event</a>
         <p className="mt-3 text-xs font-bold uppercase tracking-widest text-emerald-800">Published lineup · Shared results</p>
         <h1 className="mt-2 max-w-2xl break-words text-3xl font-bold text-emerald-950 md:text-5xl">{snapshot?.title || "Event results"}</h1>
         <p className="mt-3 max-w-xl text-slate-700">Players and organizers can enter scores here. Anyone with this link can edit results.</p>
         {snapshot && <div className="mt-4 flex flex-wrap gap-2 text-sm font-semibold"><span className="rounded-full bg-white px-3 py-2">{getMatchFormatLabel(snapshot.format.type, snapshot.format.gamesToWin)}{snapshot.format.type === "timed" ? ` · ${snapshot.format.minutesPerRound} min` : ""}</span><span className="rounded-full bg-lime-200 px-3 py-2">{completed} of {total} matches completed</span></div>}
       </header>
-      <section className="tennis-panel rounded-3xl p-5 shadow-xl">
-        <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-bold">Share with your group</h2><p className="text-sm text-slate-600">Save this link to return to the event.</p></div><button type="button" onClick={copyLink} className={buttonClass}><Copy size={16} /> {copyStatus === "Link copied" ? "Link copied" : "Copy event link"}</button></div>
+      <section className="print-hidden tennis-panel rounded-3xl p-5 shadow-xl">
+        <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-bold">Share and export</h2><p className="text-sm text-slate-600">Save the link, export results, or print a polished copy.</p></div><div className="flex flex-wrap gap-2"><button type="button" onClick={copyLink} className={buttonClass}><Copy size={16} /> {copyStatus === "Link copied" ? "Link copied" : "Copy event link"}</button><button type="button" onClick={exportCsv} disabled={!event} className={buttonClass}><Download size={16} /> CSV</button><button type="button" onClick={() => window.print()} className={buttonClass}><Printer size={16} /> Print / PDF</button></div></div>
         <input aria-label="Event link" readOnly value={window.location.href} onFocus={(e) => e.target.select()} className="mt-3 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600" />
         {copyStatus && <p role="status" className="mt-2 text-sm text-emerald-800">{copyStatus}</p>}
       </section>
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-emerald-950/90 px-4 py-2 text-sm text-white">
+      <div className="print-hidden flex flex-wrap items-center justify-between gap-2 rounded-xl bg-emerald-950/90 px-4 py-2 text-sm text-white">
         <span>{loadedAt ? `Updates every 15 seconds · Last checked ${loadedAt.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : error ? "Unable to load this event" : "Loading saved lineup and scores…"}</span><button type="button" onClick={() => setRefreshKey((key) => key + 1)} className="inline-flex min-h-11 items-center gap-2 font-semibold"><RefreshCw size={16} /> Refresh</button>
       </div>
       {error && <p role="alert" className="rounded-2xl bg-amber-50 p-4 text-amber-900">{error}{event && " Showing the last loaded scores."}</p>}
       <p role="status" className="sr-only">{notice}</p>
       {snapshot && <>
-        <div className="flex flex-wrap gap-2"><a href="#rounds" className={buttonClass}>Enter results</a><a href="#standings" className={buttonClass}>View standings</a></div>
+        <div className="print-hidden flex flex-wrap gap-2"><a href="#rounds" className={buttonClass}>Enter results</a><a href="#standings" className={buttonClass}>View standings</a></div>
         <div id="rounds" className="space-y-5">
           {snapshot.rounds.map((round) => <section key={round.number} className="tennis-panel rounded-3xl p-5 shadow-xl md:p-6">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2"><h2 className="text-xl font-bold text-emerald-950">Round {round.number}</h2>{snapshot.format.type === "timed" && <span className="text-sm font-semibold text-slate-600">{round.time}</span>}</div>

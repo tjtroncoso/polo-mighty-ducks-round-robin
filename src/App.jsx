@@ -5,6 +5,7 @@ import { createSnapshot } from "./events.mjs";
 import { eventApi } from "./event-api.mjs";
 import { getSetupIssues } from "./setup-status.mjs";
 import OrganizerEvents from "./OrganizerEvents.jsx";
+import SavedRosters from "./SavedRosters.jsx";
 
 const createBlankPlayer = () => ({
   id:
@@ -172,6 +173,16 @@ export default function TennisRoundRobinGenerator({ auth, accountControls }) {
     setPlayerRows((current) => [...current, createBlankPlayer()]);
   }
 
+  function loadSavedRoster(players) {
+    const rows = players.map((player) => ({ ...player, isLate: false, arrival: "" }));
+    while (rows.length < 4) rows.push(createBlankPlayer());
+    setPlayerRows(rows);
+    setLockedPairs([]);
+    setCopyStatus("idle");
+    setPublishError("");
+    publicationRef.current = null;
+  }
+
   function removePlayerRow(id) {
     setLockedPairs((current) => current.filter((pair) => !pair.includes(id)));
     setPlayerRows((current) => {
@@ -248,7 +259,9 @@ export default function TennisRoundRobinGenerator({ auth, accountControls }) {
         </header>
 
         <div className="grid gap-6 lg:grid-cols-[460px_1fr]">
-          <Panel className="p-6">
+          <div className="space-y-6">
+            {auth.enabled && auth.isLoaded && auth.isSignedIn ? <SavedRosters getToken={auth.getToken} playerRows={playerRows} onLoadRoster={loadSavedRoster} /> : null}
+            <Panel className="p-6">
             <div className="mb-5 flex items-center gap-2">
               <Users className="h-5 w-5" />
               <h2 className="text-xl font-semibold">Setup</h2>
@@ -593,7 +606,8 @@ export default function TennisRoundRobinGenerator({ auth, accountControls }) {
                 <RefreshCw className="h-4 w-4" /> Reset Form
               </button>
             </div>
-          </Panel>
+            </Panel>
+          </div>
 
           <main className="space-y-6">
             {auth.enabled && auth.isLoaded && auth.isSignedIn ? <OrganizerEvents getToken={auth.getToken} /> : null}

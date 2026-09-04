@@ -44,8 +44,45 @@ export const eventApi = {
     signal,
     headers: await organizerHeaders(getToken),
   }),
+  setArchived: async (id, action, getToken) => request(`/api/events?id=${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: await organizerHeaders(getToken, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ action }),
+  }),
+  duplicate: async (sourceId, id, getToken) => request("/api/events", {
+    method: "POST",
+    headers: await organizerHeaders(getToken, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ action: "duplicate", sourceId, id }),
+  }),
+  createInvite: async (eventId, token, getToken) => request("/api/events", {
+    method: "POST",
+    headers: await organizerHeaders(getToken, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ action: "create_invite", eventId, token }),
+  }),
+  claimInvite: async (token, getToken) => request("/api/events", {
+    method: "POST",
+    headers: await organizerHeaders(getToken, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ action: "claim_invite", token }),
+  }),
+  delete: async (id, getToken) => request(`/api/events?id=${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: await organizerHeaders(getToken),
+  }),
   get: (id, signal) => request(`/api/events?id=${encodeURIComponent(id)}`, { signal }),
   save: (id, matchId, version, result) => request(`/api/events?id=${encodeURIComponent(id)}&match=${encodeURIComponent(matchId)}`, {
     method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ version, result }),
+  }),
+};
+
+export const rosterApi = {
+  list: async (getToken, signal) => request("/api/rosters", { signal, headers: await organizerHeaders(getToken) }),
+  save: async (roster, getToken) => request("/api/rosters", {
+    method: "POST",
+    headers: await organizerHeaders(getToken, { "Content-Type": "application/json" }),
+    body: JSON.stringify(roster),
+  }),
+  delete: async (id, getToken) => request(`/api/rosters?id=${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: await organizerHeaders(getToken),
   }),
 };
