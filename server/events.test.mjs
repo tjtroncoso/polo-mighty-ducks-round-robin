@@ -34,14 +34,35 @@ before(async () => {
   directory = await mkdtemp(join(tmpdir(), "tennis-results-"));
   database = new PGlite(directory);
   store = createEventStore(adapter(database));
-  handle = createEventHandler(() => store);
+  handle = createEventHandler(() => store, async (request) => request.headers.get("x-test-user"));
 });
 after(async () => { await database.close(); await rm(directory, { recursive: true, force: true }); });
 
 async function call(method, query = "", body, headers = {}) {
-  const response = await handle(new Request(`https://tennis.example/api/events${query}`, { method, headers: { "Content-Type": "application/json", ...headers }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }));
+  const response = await handle(new Request(`https://tennis.example/api/events${query}`, { method, headers: { "Content-Type": "application/json", "X-Test-User": "organizer-one", ...headers }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }));
   return { status: response.status, body: await response.json(), headers: response.headers };
 }
+
+test("publishing requires an organizer account and My Events is private to its owner", async () => {
+  const anonymous = createEventHandler(() => store, async () => null);
+  const id = randomUUID();
+  const publishRequest = new Request("https://tennis.example/api/events", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id, snapshot: lineup() }),
+  });
+  assert.equal((await anonymous(publishRequest)).status, 401);
+  assert.equal((await anonymous(new Request("https://tennis.example/api/events?mine=1"))).status, 401);
+
+  await publish();
+  const mine = await call("GET", "?mine=1");
+  assert.equal(mine.status, 200);
+  assert.ok(mine.body.events.some((event) => event.title === "Club tennis" && event.players === 8 && event.matches === 2));
+
+  const someoneElse = await call("GET", "?mine=1", undefined, { "X-Test-User": "organizer-two" });
+  assert.equal(someoneElse.status, 200);
+  assert.deepEqual(someoneElse.body.events, []);
+});
 async function publish(snapshot = lineup()) {
   const id = randomUUID();
   const response = await call("POST", "", { id, snapshot });

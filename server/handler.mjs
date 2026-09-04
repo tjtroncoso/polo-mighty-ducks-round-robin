@@ -34,7 +34,7 @@ async function readBody(request) {
   catch { throw new InputError("The request contains invalid JSON."); }
 }
 
-export function createEventHandler(getStore) {
+export function createEventHandler(getStore, getOrganizerUserId = async () => null) {
   return async function handle(request) {
     try {
       const url = new URL(request.url);
@@ -44,12 +44,19 @@ export function createEventHandler(getStore) {
         if (origin && origin !== url.origin) return json({ error: "Open the event link to enter results." }, 403);
       }
       if (request.method === "POST") {
+        const ownerUserId = await getOrganizerUserId(request);
+        if (!ownerUserId) return json({ error: "Sign in as an organizer before publishing an event." }, 401);
         const body = await readBody(request);
         if (!uuid.test(body?.id)) throw new InputError("Invalid event ID.");
         const snapshot = validateSnapshot(body.snapshot);
-        const created = await getStore().create(body.id, snapshot);
+        const created = await getStore().create(body.id, snapshot, ownerUserId);
         if (!created) return json({ error: "That event already has a published lineup. Publish a new event for a different lineup." }, 409);
         return json({ id: body.id }, 201);
+      }
+      if (url.searchParams.get("mine") === "1") {
+        const ownerUserId = await getOrganizerUserId(request);
+        if (!ownerUserId) return json({ error: "Sign in to see your events." }, 401);
+        return json({ events: await getStore().listByOwner(ownerUserId) });
       }
       const id = url.searchParams.get("id");
       if (!uuid.test(id || "")) return json({ error: "This event link is invalid." }, 404);

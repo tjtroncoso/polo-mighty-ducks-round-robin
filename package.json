@@ -6,6 +6,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@clerk/backend": "^3.17.1",
+    "@clerk/react": "^6.15.1",
     "@neondatabase/serverless": "^1.1.0",
     "@tailwindcss/vite": "latest",
     "@vitejs/plugin-react": "latest",

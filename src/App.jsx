@@ -4,6 +4,7 @@ import { Copy, Plus, RefreshCw, Shuffle, Trash2, Users } from "lucide-react";
 import { createSnapshot } from "./events.mjs";
 import { eventApi } from "./event-api.mjs";
 import { getSetupIssues } from "./setup-status.mjs";
+import OrganizerEvents from "./OrganizerEvents.jsx";
 
 const createBlankPlayer = () => ({
   id:
@@ -62,7 +63,7 @@ function normalizeCourtNumbers(existingNumbers, courtCount) {
   return Array.from({ length: courtCount }, (_, index) => existingNumbers[index] || "");
 }
 
-export default function TennisRoundRobinGenerator() {
+export default function TennisRoundRobinGenerator({ auth, accountControls }) {
   const [playerRows, setPlayerRows] = useState(() => createBlankPlayers());
   const [startTime, setStartTime] = useState("");
   const [courts, setCourts] = useState("");
@@ -122,7 +123,7 @@ export default function TennisRoundRobinGenerator() {
       const fingerprint = JSON.stringify(snapshot);
       // Reuse the ID if a response was lost after the database committed.
       if (publicationRef.current?.fingerprint !== fingerprint) publicationRef.current = { id: crypto.randomUUID(), fingerprint };
-      const { id } = await eventApi.publish(publicationRef.current.id, snapshot);
+      const { id } = await eventApi.publish(publicationRef.current.id, snapshot, auth.getToken);
       window.location.assign(`/events/${id}`);
     } catch (error) {
       setPublishError(error.message);
@@ -235,10 +236,15 @@ export default function TennisRoundRobinGenerator() {
 
       <div className="relative z-10 mx-auto max-w-7xl space-y-6">
         <header className="tennis-header rounded-3xl p-6 shadow-2xl md:p-8">
-          <h1 className="max-w-2xl text-3xl font-bold tracking-tight text-emerald-950 md:text-5xl">Tennis Round Robin Generator</h1>
-          <p className="mt-3 max-w-xl text-base text-slate-700 md:text-lg">
-            Enter your players, courts, and round settings. Share a schedule or publish an event so everyone can enter results.
-          </p>
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h1 className="max-w-2xl text-3xl font-bold tracking-tight text-emerald-950 md:text-5xl">Tennis Round Robin Generator</h1>
+              <p className="mt-3 max-w-xl text-base text-slate-700 md:text-lg">
+                Enter your players, courts, and round settings. Share a schedule or publish an event so everyone can enter results.
+              </p>
+            </div>
+            {accountControls}
+          </div>
         </header>
 
         <div className="grid gap-6 lg:grid-cols-[460px_1fr]">
@@ -590,15 +596,16 @@ export default function TennisRoundRobinGenerator() {
           </Panel>
 
           <main className="space-y-6">
+            {auth.enabled && auth.isLoaded && auth.isSignedIn ? <OrganizerEvents getToken={auth.getToken} /> : null}
             <Panel className="p-6">
               <h2 className="text-xl font-semibold">Ready to play?</h2>
               <p className="mt-2 text-sm text-slate-600">Publish this lineup to save it and get a shared results page. Anyone with the link can enter and correct scores—no account needed.</p>
               <label className="mt-4 block text-sm font-semibold" htmlFor="event-title">Event name <span className="font-normal text-slate-500">(optional)</span></label>
               <input id="event-title" maxLength={120} value={eventTitle} onChange={(event) => setEventTitle(event.target.value)} placeholder="Saturday morning tennis" className="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-3 text-sm" />
-              <button type="button" onClick={publishEvent} disabled={publishing || !scheduleReady || !generated.schedule.some((round) => round.matches.length)} className="mt-4 w-full rounded-2xl bg-emerald-950 px-4 py-3 font-semibold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50">
-                {publishing ? "Publishing lineup…" : "Publish lineup & track results"}
+              <button type="button" onClick={publishEvent} disabled={publishing || !auth.enabled || !auth.isLoaded || !auth.isSignedIn || !scheduleReady || !generated.schedule.some((round) => round.matches.length)} className="mt-4 w-full rounded-2xl bg-emerald-950 px-4 py-3 font-semibold text-white transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:opacity-50">
+                {publishing ? "Publishing lineup…" : !auth.enabled ? "Organizer login setup pending" : !auth.isLoaded ? "Checking organizer account…" : !auth.isSignedIn ? "Sign in above to publish" : "Publish lineup & track results"}
               </button>
-              <p className="mt-2 text-xs text-slate-500">Publishing fixes the lineup for this event. Changes to the generator are saved only when you publish a new event.</p>
+              <p className="mt-2 text-xs text-slate-500">Publishing fixes the lineup for this event and saves it to your organizer account. Players can still use the shared results link without signing in.</p>
               {publishError && <p role="alert" className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{publishError}</p>}
             </Panel>
             <Panel className="p-6">

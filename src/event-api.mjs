@@ -28,8 +28,22 @@ async function request(path, options = {}) {
   }
 }
 
+async function organizerHeaders(getToken, headers = {}) {
+  const token = await getToken?.();
+  if (!token) throw new Error("Sign in as an organizer to continue.");
+  return { ...headers, Authorization: `Bearer ${token}` };
+}
+
 export const eventApi = {
-  publish: (id, snapshot) => request("/api/events", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, snapshot }) }),
+  publish: async (id, snapshot, getToken) => request("/api/events", {
+    method: "POST",
+    headers: await organizerHeaders(getToken, { "Content-Type": "application/json" }),
+    body: JSON.stringify({ id, snapshot }),
+  }),
+  mine: async (getToken, signal) => request("/api/events?mine=1", {
+    signal,
+    headers: await organizerHeaders(getToken),
+  }),
   get: (id, signal) => request(`/api/events?id=${encodeURIComponent(id)}`, { signal }),
   save: (id, matchId, version, result) => request(`/api/events?id=${encodeURIComponent(id)}&match=${encodeURIComponent(matchId)}`, {
     method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ version, result }),

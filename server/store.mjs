@@ -6,8 +6,11 @@ const schema = [
   `CREATE TABLE IF NOT EXISTS tennis_events (
     id UUID PRIMARY KEY,
     snapshot JSONB NOT NULL,
+    owner_user_id TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`,
+  "ALTER TABLE tennis_events ADD COLUMN IF NOT EXISTS owner_user_id TEXT",
+  "CREATE INDEX IF NOT EXISTS tennis_events_owner_created_idx ON tennis_events (owner_user_id, created_at DESC)",
   `CREATE TABLE IF NOT EXISTS tennis_results (
     event_id UUID NOT NULL REFERENCES tennis_events(id),
     match_id TEXT NOT NULL,
@@ -30,17 +33,34 @@ export function createEventStore(database) {
     await ready;
   }
   return {
-    async create(id, snapshot) {
+    async create(id, snapshot, ownerUserId) {
       await initialize();
       const rows = await database.query(
-        "INSERT INTO tennis_events (id, snapshot) VALUES ($1, $2::jsonb) ON CONFLICT DO NOTHING RETURNING id",
-        [id, JSON.stringify(snapshot)],
+        "INSERT INTO tennis_events (id, snapshot, owner_user_id) VALUES ($1, $2::jsonb, $3) ON CONFLICT DO NOTHING RETURNING id",
+        [id, JSON.stringify(snapshot), ownerUserId],
       );
       if (!rows.length) {
-        const [existing] = await database.query("SELECT snapshot = $2::jsonb AS same FROM tennis_events WHERE id = $1", [id, JSON.stringify(snapshot)]);
+        const [existing] = await database.query(
+          "SELECT snapshot = $2::jsonb AND owner_user_id = $3 AS same FROM tennis_events WHERE id = $1",
+          [id, JSON.stringify(snapshot), ownerUserId],
+        );
         if (!existing?.same) return false;
       }
       return true;
+    },
+    async listByOwner(ownerUserId) {
+      await initialize();
+      const rows = await database.query(
+        "SELECT id, snapshot, created_at FROM tennis_events WHERE owner_user_id = $1 ORDER BY created_at DESC LIMIT 100",
+        [ownerUserId],
+      );
+      return rows.map((event) => ({
+        id: event.id,
+        title: event.snapshot.title || "Untitled tennis event",
+        createdAt: new Date(event.created_at).toISOString(),
+        players: event.snapshot.players.length,
+        matches: event.snapshot.rounds.reduce((total, round) => total + round.matches.length, 0),
+      }));
     },
     async get(id) {
       await initialize();
