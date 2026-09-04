@@ -72,9 +72,9 @@ export function createEventStore(database) {
 let productionStore;
 
 export function getDatabaseUrl(environment = process.env) {
-  const isPaidBetaPreview = environment.VERCEL_ENV === "preview"
-    && environment.VERCEL_GIT_COMMIT_REF === "paid-beta";
-  return isPaidBetaPreview ? environment.PAID_BETA_DATABASE_URL : environment.DATABASE_URL;
+  return environment.VERCEL_ENV === "preview"
+    ? environment.PAID_BETA_DATABASE_URL
+    : environment.DATABASE_URL;
 }
 
 export function getEventStore() {

@@ -136,7 +136,7 @@ test("missing database configuration returns a truthful unavailable response", a
   } finally { if (original !== undefined) process.env.DATABASE_URL = original; }
 });
 
-test("paid-beta preview never falls back to the production database", () => {
+test("preview deployments never fall back to the production database", () => {
   const production = "postgresql://production.example/tennis";
   const preview = "postgresql://preview.example/tennis";
 
@@ -146,7 +146,7 @@ test("paid-beta preview never falls back to the production database", () => {
     VERCEL_GIT_COMMIT_REF: "another-branch",
     DATABASE_URL: production,
     PAID_BETA_DATABASE_URL: preview,
-  }), production);
+  }), preview);
   assert.equal(getDatabaseUrl({
     VERCEL_ENV: "preview",
     VERCEL_GIT_COMMIT_REF: "paid-beta",
