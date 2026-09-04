@@ -44,6 +44,17 @@ const schema = [
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`,
   "CREATE INDEX IF NOT EXISTS tennis_rosters_owner_updated_idx ON tennis_rosters (owner_user_id, updated_at DESC)",
+  `CREATE TABLE IF NOT EXISTS tennis_saved_players (
+    id UUID PRIMARY KEY,
+    owner_user_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    normalized_name TEXT NOT NULL,
+    gender TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (owner_user_id, normalized_name)
+  )`,
+  "CREATE INDEX IF NOT EXISTS tennis_saved_players_owner_updated_idx ON tennis_saved_players (owner_user_id, updated_at DESC)",
 ];
 
 function publicResult(row) {
@@ -56,6 +67,19 @@ export function createEventStore(database) {
   async function initialize() {
     if (!ready) ready = database.transaction(schema.map((query) => [query, []])).catch((error) => { ready = null; throw error; });
     await ready;
+  }
+  async function frequentPlayersFor(ownerUserId) {
+    const rows = await database.query(
+      "SELECT id, name, gender, created_at, updated_at FROM tennis_saved_players WHERE owner_user_id = $1 ORDER BY updated_at DESC, name ASC LIMIT 200",
+      [ownerUserId],
+    );
+    return rows.map((player) => ({
+      id: player.id,
+      name: player.name,
+      gender: player.gender,
+      createdAt: new Date(player.created_at).toISOString(),
+      updatedAt: new Date(player.updated_at).toISOString(),
+    }));
   }
   return {
     async create(id, snapshot, ownerUserId) {
@@ -177,34 +201,24 @@ export function createEventStore(database) {
            WHERE event_id = $1 AND match_id = $2 AND version = $4 RETURNING result, version, updated_at`, [...parameters, expectedVersion]);
       return rows.length ? publicResult(rows[0]) : null;
     },
-    async listRosters(ownerUserId) {
+    async listFrequentPlayers(ownerUserId) {
       await initialize();
-      const rows = await database.query(
-        "SELECT id, name, players, created_at, updated_at FROM tennis_rosters WHERE owner_user_id = $1 ORDER BY updated_at DESC LIMIT 100",
-        [ownerUserId],
-      );
-      return rows.map((roster) => ({
-        id: roster.id,
-        name: roster.name,
-        players: roster.players,
-        createdAt: new Date(roster.created_at).toISOString(),
-        updatedAt: new Date(roster.updated_at).toISOString(),
-      }));
+      return frequentPlayersFor(ownerUserId);
     },
-    async saveRoster(id, ownerUserId, name, players) {
+    async saveFrequentPlayers(ownerUserId, players) {
       await initialize();
-      const rows = await database.query(
-        `INSERT INTO tennis_rosters (id, owner_user_id, name, players) VALUES ($1, $2, $3, $4::jsonb)
-         ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, players = EXCLUDED.players, updated_at = now()
-         WHERE tennis_rosters.owner_user_id = EXCLUDED.owner_user_id
-         RETURNING id, updated_at`,
-        [id, ownerUserId, name, JSON.stringify(players)],
-      );
-      return rows.length ? { id: rows[0].id, updatedAt: new Date(rows[0].updated_at).toISOString() } : null;
+      await database.transaction(players.map((player) => [
+        `INSERT INTO tennis_saved_players (id, owner_user_id, name, normalized_name, gender)
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (owner_user_id, normalized_name)
+         DO UPDATE SET name = EXCLUDED.name, gender = EXCLUDED.gender, updated_at = now()`,
+        [player.id, ownerUserId, player.name, player.normalizedName, player.gender],
+      ]));
+      return frequentPlayersFor(ownerUserId);
     },
-    async deleteRoster(id, ownerUserId) {
+    async deleteFrequentPlayer(id, ownerUserId) {
       await initialize();
-      const rows = await database.query("DELETE FROM tennis_rosters WHERE id = $1 AND owner_user_id = $2 RETURNING id", [id, ownerUserId]);
+      const rows = await database.query("DELETE FROM tennis_saved_players WHERE id = $1 AND owner_user_id = $2 RETURNING id", [id, ownerUserId]);
       return Boolean(rows.length);
     },
   };

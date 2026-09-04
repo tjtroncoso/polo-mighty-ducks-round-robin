@@ -2,23 +2,20 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { buildEventCsv } from "./exports.mjs";
-import { validateRoster } from "./rosters.mjs";
+import { validateFrequentPlayers } from "./frequent-players.mjs";
 
-test("saved roster validation preserves names and mixed-doubles gender selections", () => {
-  const roster = validateRoster({
-    id: randomUUID(),
-    name: "  Thursday regulars  ",
+test("frequent-player validation preserves names and mixed-doubles gender selections", () => {
+  const players = validateFrequentPlayers({
     players: [
-      { id: "a", name: " Alex ", gender: "male" },
-      { id: "b", name: "Bailey", gender: "female" },
+      { id: randomUUID(), name: " Alex ", gender: "male" },
+      { id: randomUUID(), name: "Bailey", gender: "female" },
     ],
   });
-  assert.equal(roster.name, "Thursday regulars");
-  assert.deepEqual(roster.players, [
-    { id: "a", name: "Alex", gender: "male" },
-    { id: "b", name: "Bailey", gender: "female" },
-  ]);
-  assert.throws(() => validateRoster({ ...roster, players: [roster.players[0]] }), /2–200 players/);
+  assert.equal(players[0].name, "Alex");
+  assert.equal(players[0].normalizedName, "alex");
+  assert.equal(players[0].gender, "male");
+  assert.equal(players[1].name, "Bailey");
+  assert.throws(() => validateFrequentPlayers({ players: [{ ...players[0], name: "Alex" }, { ...players[1], name: " alex " }] }), /only once/);
 });
 
 test("CSV export contains schedule, results, escaped names, and standings", () => {

@@ -5,7 +5,7 @@ import { createSnapshot } from "./events.mjs";
 import { eventApi } from "./event-api.mjs";
 import { getSetupIssues } from "./setup-status.mjs";
 import OrganizerEvents from "./OrganizerEvents.jsx";
-import SavedRosters from "./SavedRosters.jsx";
+import FrequentPlayers from "./FrequentPlayers.jsx";
 
 const createBlankPlayer = () => ({
   id:
@@ -173,11 +173,21 @@ export default function TennisRoundRobinGenerator({ auth, accountControls }) {
     setPlayerRows((current) => [...current, createBlankPlayer()]);
   }
 
-  function loadSavedRoster(players) {
-    const rows = players.map((player) => ({ ...player, isLate: false, arrival: "" }));
-    while (rows.length < 4) rows.push(createBlankPlayer());
-    setPlayerRows(rows);
-    setLockedPairs([]);
+  function addFrequentPlayers(players) {
+    setPlayerRows((current) => {
+      const names = new Set(current.filter((row) => row.name.trim()).map((row) => row.name.trim().toLowerCase()));
+      const next = [...current];
+      for (const player of players) {
+        const normalizedName = player.name.trim().toLowerCase();
+        if (!normalizedName || names.has(normalizedName)) continue;
+        const row = { ...createBlankPlayer(), name: player.name.trim(), gender: player.gender || "" };
+        const emptyIndex = next.findIndex((existing) => !existing.name.trim());
+        if (emptyIndex === -1) next.push(row);
+        else next[emptyIndex] = row;
+        names.add(normalizedName);
+      }
+      return next;
+    });
     setCopyStatus("idle");
     setPublishError("");
     publicationRef.current = null;
@@ -260,7 +270,7 @@ export default function TennisRoundRobinGenerator({ auth, accountControls }) {
 
         <div className="grid gap-6 lg:grid-cols-[460px_1fr]">
           <div className="space-y-6">
-            {auth.enabled && auth.isLoaded && auth.isSignedIn ? <SavedRosters getToken={auth.getToken} playerRows={playerRows} onLoadRoster={loadSavedRoster} /> : null}
+            {auth.enabled && auth.isLoaded && auth.isSignedIn ? <FrequentPlayers getToken={auth.getToken} playerRows={playerRows} onAddPlayers={addFrequentPlayers} /> : null}
             <Panel className="p-6">
             <div className="mb-5 flex items-center gap-2">
               <Users className="h-5 w-5" />

@@ -74,14 +74,14 @@ export const eventApi = {
   }),
 };
 
-export const rosterApi = {
-  list: async (getToken, signal) => request("/api/rosters", { signal, headers: await organizerHeaders(getToken) }),
-  save: async (roster, getToken) => request("/api/rosters", {
+export const frequentPlayerApi = {
+  list: async (getToken, signal) => request("/api/players", { signal, headers: await organizerHeaders(getToken) }),
+  save: async (players, getToken) => request("/api/players", {
     method: "POST",
     headers: await organizerHeaders(getToken, { "Content-Type": "application/json" }),
-    body: JSON.stringify(roster),
+    body: JSON.stringify(players),
   }),
-  delete: async (id, getToken) => request(`/api/rosters?id=${encodeURIComponent(id)}`, {
+  delete: async (id, getToken) => request(`/api/players?id=${encodeURIComponent(id)}`, {
     method: "DELETE",
     headers: await organizerHeaders(getToken),
   }),

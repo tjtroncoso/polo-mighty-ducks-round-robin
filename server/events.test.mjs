@@ -7,7 +7,7 @@ import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
 import { createEventStore, getDatabaseUrl, getEventStore } from "./store.mjs";
 import { createEventHandler } from "./handler.mjs";
-import { createRosterHandler } from "./roster-handler.mjs";
+import { createPlayerHandler } from "./player-handler.mjs";
 
 function lineup() {
   return {
@@ -20,7 +20,7 @@ function lineup() {
   };
 }
 const score = (a, b, status = "completed") => ({ status, scores: [{ a, b, kind: "games" }] });
-let database, directory, store, handle, rosterHandle;
+let database, directory, store, handle, playerHandle;
 function adapter(db) {
   return {
     query: async (query, values) => (await db.query(query, values)).rows,
@@ -36,7 +36,7 @@ before(async () => {
   database = new PGlite(directory);
   store = createEventStore(adapter(database));
   handle = createEventHandler(() => store, async (request) => request.headers.get("x-test-user"));
-  rosterHandle = createRosterHandler(() => store, async (request) => request.headers.get("x-test-user"));
+  playerHandle = createPlayerHandler(() => store, async (request) => request.headers.get("x-test-user"));
 });
 after(async () => { await database.close(); await rm(directory, { recursive: true, force: true }); });
 
@@ -45,8 +45,8 @@ async function call(method, query = "", body, headers = {}) {
   return { status: response.status, body: await response.json(), headers: response.headers };
 }
 
-async function callRoster(method, query = "", requestBody, headers = {}) {
-  const response = await rosterHandle(new Request(`https://tennis.example/api/rosters${query}`, { method, headers: { "Content-Type": "application/json", "X-Test-User": "organizer-one", ...headers }, ...(requestBody === undefined ? {} : { body: JSON.stringify(requestBody) }) }));
+async function callPlayer(method, query = "", requestBody, headers = {}) {
+  const response = await playerHandle(new Request(`https://tennis.example/api/players${query}`, { method, headers: { "Content-Type": "application/json", "X-Test-User": "organizer-one", ...headers }, ...(requestBody === undefined ? {} : { body: JSON.stringify(requestBody) }) }));
   return { status: response.status, body: await response.json() };
 }
 
@@ -96,24 +96,26 @@ test("organizers can duplicate, archive, restore, and permanently delete only th
   assert.equal((await call("GET", `?id=${id}`)).status, 404);
 });
 
-test("organizers can save, load, and delete reusable rosters without seeing another account", async () => {
-  const id = randomUUID();
-  const roster = {
-    id,
-    name: "Thursday regulars",
-    players: [
-      { id: "player-a", name: "Alex", gender: "male" },
-      { id: "player-b", name: "Bailey", gender: "female" },
-    ],
-  };
-  assert.equal((await callRoster("POST", "", roster)).status, 201);
-  const mine = await callRoster("GET");
-  assert.equal(mine.body.rosters[0].name, roster.name);
-  assert.deepEqual(mine.body.rosters[0].players, roster.players);
-  assert.deepEqual((await callRoster("GET", "", undefined, { "X-Test-User": "organizer-two" })).body.rosters, []);
-  assert.equal((await callRoster("DELETE", `?id=${id}`, undefined, { "X-Test-User": "organizer-two" })).status, 404);
-  assert.equal((await callRoster("DELETE", `?id=${id}`)).status, 200);
-  assert.deepEqual((await callRoster("GET")).body.rosters, []);
+test("organizers can save and reuse individual frequent players without seeing another account", async () => {
+  const alexId = randomUUID();
+  const baileyId = randomUUID();
+  const players = [
+    { id: alexId, name: "Alex", gender: "male" },
+    { id: baileyId, name: "Bailey", gender: "female" },
+  ];
+  assert.equal((await callPlayer("POST", "", { players })).status, 201);
+  let mine = await callPlayer("GET");
+  assert.equal(mine.body.players.length, 2);
+  assert.ok(mine.body.players.some((player) => player.id === alexId && player.name === "Alex" && player.gender === "male"));
+
+  assert.equal((await callPlayer("POST", "", { players: [{ id: randomUUID(), name: " alex ", gender: "female" }] })).status, 201);
+  mine = await callPlayer("GET");
+  assert.equal(mine.body.players.length, 2, "saving the same name updates instead of duplicating it");
+  assert.ok(mine.body.players.some((player) => player.id === alexId && player.name === "alex" && player.gender === "female"));
+  assert.deepEqual((await callPlayer("GET", "", undefined, { "X-Test-User": "organizer-two" })).body.players, []);
+  assert.equal((await callPlayer("DELETE", `?id=${alexId}`, undefined, { "X-Test-User": "organizer-two" })).status, 404);
+  assert.equal((await callPlayer("DELETE", `?id=${alexId}`)).status, 200);
+  assert.equal((await callPlayer("GET")).body.players.length, 1);
 });
 
 test("owners can invite a signed-in co-organizer without giving away archive or delete control", async () => {
