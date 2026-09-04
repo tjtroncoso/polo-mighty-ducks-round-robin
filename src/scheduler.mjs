@@ -98,6 +98,19 @@ function formatRoundTime(startMinutes, roundIndex, minutesPerRound) {
   return `${displayHour}:${String(minutes).padStart(2, "0")} ${suffix}`;
 }
 
+function formatTimeLabel(value) {
+  const match = String(value || "").trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return value;
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours > 23 || minutes > 59) return value;
+
+  const suffix = hours >= 12 ? "PM" : "AM";
+  const displayHour = hours % 12 || 12;
+  return `${displayHour}:${String(minutes).padStart(2, "0")} ${suffix}`;
+}
+
 function parsePositiveInteger(value, fallback, min = 1, max = 99) {
   const parsed = Number.parseInt(String(value), 10);
   if (!Number.isFinite(parsed)) return fallback;
@@ -124,14 +137,14 @@ export function parsePlayers(text, defaultStartTime) {
       seenNames.set(baseName, duplicateCount + 1);
 
       const name = duplicateCount === 0 ? baseName : `${baseName} ${duplicateCount + 1}`;
-      const arrival = rawArrival || defaultStartTime;
+      const arrivalValue = rawArrival || defaultStartTime;
 
       return {
         id: `${name}-${index}`,
         name,
         gender: "",
-        arrival,
-        arrivalMinutes: parseTimeToMinutes(arrival, defaultArrivalMinutes),
+        arrival: formatTimeLabel(arrivalValue),
+        arrivalMinutes: parseTimeToMinutes(arrivalValue, defaultArrivalMinutes),
         matches: 0,
       };
     });
@@ -213,31 +226,29 @@ function scoreDoublesMatch(pairA, pairB, opponentMap) {
 function chooseBestDoublesMatch(pool, partnerMap, opponentMap, lockedPartnerMap, random = Math.random, requireMixed = false) {
   if (pool.length < 4) return null;
 
-  let bestMatch = null;
+  const pairA = chooseBestPair(pool, partnerMap, lockedPartnerMap, random, requireMixed);
+  if (!pairA) return null;
+
+  const pairAIds = new Set(pairA.map((player) => player.id));
+  const remaining = pool.filter((player) => !pairAIds.has(player.id));
+  let pairB = null;
   let bestScore = Infinity;
   let bestTieBreaker = Infinity;
   let bestMatchCount = Infinity;
 
-  for (let a = 0; a < pool.length; a += 1) {
-    for (let b = a + 1; b < pool.length; b += 1) {
-      const pairA = [pool[a], pool[b]];
-      if (!isAllowedPair(pairA[0], pairA[1], lockedPartnerMap, requireMixed)) continue;
+  for (let firstIndex = 0; firstIndex < remaining.length; firstIndex += 1) {
+    for (let secondIndex = firstIndex + 1; secondIndex < remaining.length; secondIndex += 1) {
+      const candidate = [remaining[firstIndex], remaining[secondIndex]];
+      if (!isAllowedPair(candidate[0], candidate[1], lockedPartnerMap, requireMixed)) continue;
 
-      const remaining = pool.filter((_, index) => index !== a && index !== b);
-      const pairB = chooseBestPair(remaining, partnerMap, lockedPartnerMap, random, requireMixed);
-
-      if (!pairB) continue;
-
-      const currentScore =
-        scorePair(pairA[0], pairA[1], partnerMap, lockedPartnerMap) +
-        scorePair(pairB[0], pairB[1], partnerMap, lockedPartnerMap) +
-        scoreDoublesMatch(pairA, pairB, opponentMap);
-      const matchCount = [...pairA, ...pairB].reduce((total, player) => total + player.matches, 0);
+      const currentScore = scorePair(candidate[0], candidate[1], partnerMap, lockedPartnerMap) +
+        scoreDoublesMatch(pairA, candidate, opponentMap);
+      const matchCount = candidate[0].matches + candidate[1].matches;
       const tieBreaker = random();
 
       if (matchCount < bestMatchCount || (matchCount === bestMatchCount &&
         (currentScore < bestScore || (currentScore === bestScore && tieBreaker < bestTieBreaker)))) {
-        bestMatch = { pairA, pairB };
+        pairB = candidate;
         bestScore = currentScore;
         bestTieBreaker = tieBreaker;
         bestMatchCount = matchCount;
@@ -245,7 +256,7 @@ function chooseBestDoublesMatch(pool, partnerMap, opponentMap, lockedPartnerMap,
     }
   }
 
-  return bestMatch;
+  return pairB ? { pairA, pairB } : null;
 }
 
 function recordDoublesHistory(match, partnerMap, opponentMap) {
@@ -264,6 +275,35 @@ function recordDoublesHistory(match, partnerMap, opponentMap) {
   });
 }
 
+function chooseBestSinglesMatch(pool, opponentMap, random = Math.random) {
+  let bestMatch = null;
+  let bestScore = Infinity;
+  let bestTieBreaker = Infinity;
+
+  for (let firstIndex = 0; firstIndex < pool.length; firstIndex += 1) {
+    for (let secondIndex = firstIndex + 1; secondIndex < pool.length; secondIndex += 1) {
+      const first = pool[firstIndex];
+      const second = pool[secondIndex];
+      const repeatPenalty = getSet(opponentMap, first.name).has(second.name) ? 10 : 0;
+      const score = first.matches + second.matches + repeatPenalty;
+      const tieBreaker = random();
+
+      if (score < bestScore || (score === bestScore && tieBreaker < bestTieBreaker)) {
+        bestMatch = [first, second];
+        bestScore = score;
+        bestTieBreaker = tieBreaker;
+      }
+    }
+  }
+
+  return bestMatch;
+}
+
+function recordSinglesHistory(first, second, opponentMap) {
+  getSet(opponentMap, first.name).add(second.name);
+  getSet(opponentMap, second.name).add(first.name);
+}
+
 function makeCourtList(courtNumbers, courtCount) {
   const numbers = Array.isArray(courtNumbers) ? courtNumbers : [];
 
@@ -274,8 +314,8 @@ function makeCourtList(courtNumbers, courtCount) {
 }
 
 export function generateSchedule({ playersText, playersData, startTime, courts, rounds, minutesPerRound, estimatedMinutesPerRound = 30, gamesToWin = 3, courtNumbers, mode, lockedPairs = [], matchFormat = "timed", shuffleSeed = 1 }) {
-  const safeCourts = parseOptionalPositiveInteger(courts, 0, 0, 20);
-  const safeRounds = parseOptionalPositiveInteger(rounds, 0, 0, 20);
+  const safeCourts = parseOptionalPositiveInteger(courts, 0, 0, 50);
+  const safeRounds = parseOptionalPositiveInteger(rounds, 0, 0, 50);
   const safeMinutesPerRound = parseOptionalPositiveInteger(matchFormat === "timed" ? minutesPerRound : estimatedMinutesPerRound, 30, 5, 180);
   const startMinutes = parseTimeToMinutes(startTime, 19 * 60);
   const random = seededRandom(shuffleSeed || 1);
@@ -286,11 +326,12 @@ export function generateSchedule({ playersText, playersData, startTime, courts, 
   const courtList = makeCourtList(courtNumbers, safeCourts);
   const schedule = [];
   const requireMixed = mode === "mixed";
+  const singlesOnly = mode === "singles";
   const playersById = new Map(players.map((player) => [player.id, player]));
   const lockedPartnerMap = new Map();
   const errors = [];
 
-  for (const pair of lockedPairs) {
+  for (const pair of singlesOnly ? [] : lockedPairs) {
     const [first, second] = pair.map((id) => playersById.get(id));
     if (pair.length !== 2 || !first || !second || first.id === second.id) {
       errors.push("Each locked pairing needs two different named players. Update or remove the pairing.");
@@ -324,7 +365,7 @@ export function generateSchedule({ playersText, playersData, startTime, courts, 
       .filter((player) => player.arrivalMinutes <= roundStart)
       .sort((a, b) => a.matches - b.matches || a.arrivalMinutes - b.arrivalMinutes || random() - 0.5);
     const availableIds = new Set(available.map((player) => player.id));
-    const waitingForPartner = available
+    const waitingForPartner = singlesOnly ? [] : available
       .filter((player) => lockedPartnerMap.has(player.id) && !availableIds.has(lockedPartnerMap.get(player.id)))
       .map((player) => ({ ...player, partnerName: playersById.get(lockedPartnerMap.get(player.id)).name }));
     const waitingIds = new Set(waitingForPartner.map((player) => player.id));
@@ -333,6 +374,25 @@ export function generateSchedule({ playersText, playersData, startTime, courts, 
       const pool = available
         .filter((player) => !used.has(player.name) && !waitingIds.has(player.id))
         .sort((a, b) => a.matches - b.matches || random() - 0.5);
+
+      if (singlesOnly) {
+        if (pool.length < 2) break;
+        const singlesPlayers = chooseBestSinglesMatch(pool, opponentMap, random);
+        if (!singlesPlayers) break;
+
+        singlesPlayers.forEach((player) => {
+          used.add(player.name);
+          player.matches += 1;
+        });
+        recordSinglesHistory(singlesPlayers[0], singlesPlayers[1], opponentMap);
+        matches.push({
+          court: courtList[courtIndex],
+          type: "Singles",
+          pairA: [singlesPlayers[0]],
+          pairB: [singlesPlayers[1]],
+        });
+        continue;
+      }
 
       if (pool.length < 4) break;
 
@@ -356,25 +416,7 @@ export function generateSchedule({ playersText, playersData, startTime, courts, 
       recordDoublesHistory(match, partnerMap, opponentMap);
     }
 
-    let sitOuts = available.filter((player) => !used.has(player.name) && !waitingIds.has(player.id));
-    const singlesPool = sitOuts.filter((player) => !lockedPartnerMap.has(player.id));
-
-    if (mode === "singles" && matches.length < safeCourts && singlesPool.length >= 2) {
-      const singlesPlayers = [...singlesPool].sort((a, b) => a.matches - b.matches || random() - 0.5).slice(0, 2);
-      singlesPlayers.forEach((player) => {
-        used.add(player.name);
-        player.matches += 1;
-      });
-
-      matches.push({
-        court: courtList[matches.length],
-        type: "Singles",
-        pairA: [singlesPlayers[0]],
-        pairB: [singlesPlayers[1]],
-      });
-
-      sitOuts = available.filter((player) => !used.has(player.name) && !waitingIds.has(player.id));
-    }
+    const sitOuts = available.filter((player) => !used.has(player.name) && !waitingIds.has(player.id));
 
     schedule.push({
       round: roundIndex + 1,

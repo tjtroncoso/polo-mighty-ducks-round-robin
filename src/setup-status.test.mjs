@@ -15,7 +15,7 @@ test("identifies every incomplete core field with a direct target", () => {
   assert.match(issues[0].label, /4 more named players/);
 });
 
-test("requires two players only when singles courts are allowed", () => {
+test("requires two players only in Singles mode", () => {
   assert.deepEqual(getSetupIssues(complete({ playerRows: [player(1), player(2)], mode: "singles" })), []);
   assert.match(getSetupIssues(complete({ playerRows: [player(1)], mode: "singles" }))[0].label, /1 more named player/);
 });
@@ -33,8 +33,9 @@ test("points to the first late player missing an arrival time", () => {
   assert.deepEqual(issues, [{ targetId: "arrival-1", label: "Enter an arrival time for Player 1" }]);
 });
 
-test("checks ranges and format-specific settings without flagging defaults that are present", () => {
+test("checks ranges through 50 and format-specific settings without flagging defaults that are present", () => {
   assert.deepEqual(getSetupIssues(complete()), []);
+  assert.deepEqual(getSetupIssues(complete({ courts: "50", rounds: "50" })), []);
   assert.deepEqual(getSetupIssues(complete({ matchFormat: "set", minutesPerRound: "" })), []);
-  assert.deepEqual(getSetupIssues(complete({ matchFormat: "games", gamesToWin: "0", courts: "21", rounds: "2.5" })).map(({ targetId }) => targetId), ["games-to-win", "courts", "rounds"]);
+  assert.deepEqual(getSetupIssues(complete({ matchFormat: "games", gamesToWin: "0", courts: "51", rounds: "2.5" })).map(({ targetId }) => targetId), ["games-to-win", "courts", "rounds"]);
 });

@@ -16,6 +16,8 @@ const createBlankPlayer = () => ({
   arrival: "",
 });
 
+const createBlankPlayers = (count = 4) => Array.from({ length: count }, createBlankPlayer);
+
 export function copyTextToClipboard(text) {
   if (navigator.clipboard && window.isSecureContext) {
     return navigator.clipboard.writeText(text);
@@ -61,7 +63,7 @@ function normalizeCourtNumbers(existingNumbers, courtCount) {
 }
 
 export default function TennisRoundRobinGenerator() {
-  const [playerRows, setPlayerRows] = useState([createBlankPlayer()]);
+  const [playerRows, setPlayerRows] = useState(() => createBlankPlayers());
   const [startTime, setStartTime] = useState("");
   const [courts, setCourts] = useState("");
   const [rounds, setRounds] = useState("");
@@ -80,11 +82,12 @@ export default function TennisRoundRobinGenerator() {
   const publicationRef = useRef(null);
   const outputRef = useRef(null);
 
-  const courtCount = parseOptionalPositiveInteger(courts, 0, 0, 20);
+  const courtCount = parseOptionalPositiveInteger(courts, 0, 0, 50);
   const visibleCourtNumbers = useMemo(() => normalizeCourtNumbers(courtNumbers, courtCount), [courtNumbers, courtCount]);
   const playersText = useMemo(() => buildPlayersTextFromRows(playerRows), [playerRows]);
   const playersData = useMemo(() => buildPlayersFromRows(playerRows, startTime || "7:00 PM"), [playerRows, startTime]);
   const isMixedMode = mode === "mixed";
+  const isSinglesMode = mode === "singles";
   const hasLatePlayers = playerRows.some((row) => row.name.trim() && row.isLate);
   const lockedPartnerById = new Map(lockedPairs.flatMap(([first, second]) => [[first, second], [second, first]]));
 
@@ -115,7 +118,7 @@ export default function TennisRoundRobinGenerator() {
     setPublishing(true);
     setPublishError("");
     try {
-      const snapshot = createSnapshot({ title: eventTitle, players: playersData, schedule: generated.schedule, matchFormat, lockedPairs });
+      const snapshot = createSnapshot({ title: eventTitle, players: playersData, schedule: generated.schedule, matchFormat, lockedPairs: isSinglesMode ? [] : lockedPairs });
       const fingerprint = JSON.stringify(snapshot);
       // Reuse the ID if a response was lost after the database committed.
       if (publicationRef.current?.fingerprint !== fingerprint) publicationRef.current = { id: crypto.randomUUID(), fingerprint };
@@ -190,7 +193,7 @@ export default function TennisRoundRobinGenerator() {
   }
 
   function clearForm() {
-    setPlayerRows([createBlankPlayer()]);
+    setPlayerRows(createBlankPlayers());
     setStartTime("");
     setCourts("");
     setRounds("");
@@ -246,6 +249,24 @@ export default function TennisRoundRobinGenerator() {
             </div>
 
             <div className="space-y-5">
+              <div className="space-y-2">
+                <FieldLabel>Pairing mode</FieldLabel>
+                <select
+                  aria-label="Pairing mode"
+                  value={mode}
+                  onChange={(event) => {
+                    const nextMode = event.target.value;
+                    setMode(nextMode);
+                    if (nextMode === "singles") setLockedPairs([]);
+                  }}
+                  className="w-full rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-slate-400 transition focus:ring-2"
+                >
+                  <option value="doubles">Doubles</option>
+                  <option value="mixed">Mixed Doubles</option>
+                  <option value="singles">Singles</option>
+                </select>
+              </div>
+
               <div id="players-section" className="space-y-3" tabIndex={-1}>
                 <div className="flex items-center justify-between gap-3">
                   <FieldLabel>Players</FieldLabel>
@@ -307,7 +328,7 @@ export default function TennisRoundRobinGenerator() {
                           </div>
                         ) : null}
 
-                        {row.name.trim() ? (
+                        {row.name.trim() && !isSinglesMode ? (
                           <div className="mt-3 space-y-1">
                             <label htmlFor={`partner-${row.id}`} className="text-sm font-medium text-slate-700">Keep paired with</label>
                             <select
@@ -333,7 +354,7 @@ export default function TennisRoundRobinGenerator() {
                         <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                           <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-700">
                             <input
-                              id={`arrival-${row.id}`}
+                              id={`late-toggle-${row.id}`}
                               type="checkbox"
                               checked={row.isLate}
                               onChange={(event) => updatePlayerRow(row.id, { isLate: event.target.checked, arrival: event.target.checked ? row.arrival : "" })}
@@ -344,10 +365,13 @@ export default function TennisRoundRobinGenerator() {
 
                           {row.isLate ? (
                             <input
+                              id={`arrival-${row.id}`}
+                              type="time"
+                              step="300"
                               value={row.arrival}
                               onChange={(event) => updatePlayerRow(row.id, { arrival: event.target.value })}
                               className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-slate-400 transition focus:ring-2 sm:w-36"
-                              placeholder="7:30 PM"
+                              aria-label={`${row.name.trim() || `Player ${index + 1}`} arrival time`}
                             />
                           ) : null}
                         </div>
@@ -357,7 +381,9 @@ export default function TennisRoundRobinGenerator() {
                 </div>
 
                 <p className="text-xs text-slate-500">Add one player per row. Check late arrival only for players arriving after the start time.</p>
-                <p className="text-sm text-slate-600">Choose a partner on either player's row to keep them together in every round, including after Shuffle. Both players wait if one arrives late. Choose Rotate partners to unlock them.</p>
+                {!isSinglesMode ? (
+                  <p className="text-sm text-slate-600">Choose a partner on either player's row to keep them together in every round, including after Shuffle. Both players wait if one arrives late. Choose Rotate partners to unlock them.</p>
+                ) : null}
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2">
@@ -365,11 +391,13 @@ export default function TennisRoundRobinGenerator() {
                   <FieldLabel>Start time</FieldLabel>
                   <input
                     id="start-time"
+                    type="time"
+                    step="300"
                     value={startTime}
                     onChange={(event) => setStartTime(event.target.value)}
                     className="w-full rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-slate-400 transition focus:ring-2"
-                    placeholder="7:00 PM"
                   />
+                  <p className="text-xs text-slate-500">Click the time control or type a time. Use the arrows and AM/PM selector where shown by your browser.</p>
                 </div>
 
                 <div className="space-y-2">
@@ -446,12 +474,13 @@ export default function TennisRoundRobinGenerator() {
                   <input
                     id="courts"
                     type="number"
-                    min="0"
+                    min="1"
+                    max="50"
                     value={courts}
                     onChange={(event) => {
                       const value = event.target.value;
                       setCourts(value);
-                      setCourtNumbers((current) => normalizeCourtNumbers(current, parseOptionalPositiveInteger(value, 0, 0, 20)));
+                      setCourtNumbers((current) => normalizeCourtNumbers(current, parseOptionalPositiveInteger(value, 0, 0, 50)));
                     }}
                     className="w-full rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-slate-400 transition focus:ring-2"
                     placeholder="3"
@@ -463,7 +492,8 @@ export default function TennisRoundRobinGenerator() {
                   <input
                     id="rounds"
                     type="number"
-                    min="0"
+                    min="1"
+                    max="50"
                     value={rounds}
                     onChange={(event) => setRounds(event.target.value)}
                     className="w-full rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-slate-400 transition focus:ring-2"
@@ -490,20 +520,6 @@ export default function TennisRoundRobinGenerator() {
                   </div>
                 </div>
               ) : null}
-
-              <div className="space-y-2">
-                <FieldLabel>Pairing mode</FieldLabel>
-                <select
-                  aria-label="Pairing mode"
-                  value={mode}
-                  onChange={(event) => setMode(event.target.value)}
-                  className="w-full rounded-2xl border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-slate-400 transition focus:ring-2"
-                >
-                  <option value="doubles">Doubles only</option>
-                  <option value="mixed">Mixed doubles</option>
-                  <option value="singles">Allow singles court if extra players</option>
-                </select>
-              </div>
 
               {isMixedMode && !mixedReady ? (
                 <div className="rounded-2xl bg-amber-50 p-3 text-sm text-amber-800">
@@ -589,10 +605,10 @@ export default function TennisRoundRobinGenerator() {
               <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                 <div>
                   <h2 className="text-2xl font-semibold">Generated Schedule</h2>
-                  <p className="text-sm text-slate-500">Copy and paste this into your group chat. Locked partners stay together while other partners rotate.</p>
+                  <p className="text-sm text-slate-500">{isSinglesMode ? "Copy and paste this into your group chat. Players rotate through singles opponents and sit-outs." : "Copy and paste this into your group chat. Locked partners stay together while other partners rotate."}</p>
                 </div>
                 <div className="rounded-full bg-slate-100 px-3 py-2 text-sm font-medium text-slate-700">
-                  {isMixedMode ? "Mixed doubles · " : ""}{getMatchFormatLabel(matchFormat, gamesToWin)}
+                  {isMixedMode ? "Mixed Doubles · " : isSinglesMode ? "Singles · " : "Doubles · "}{getMatchFormatLabel(matchFormat, gamesToWin)}
                 </div>
               </div>
 
