@@ -86,3 +86,13 @@ export const frequentPlayerApi = {
     headers: await organizerHeaders(getToken),
   }),
 };
+
+export const betaApi = {
+  feedback: async (getToken, signal) => request("/api/beta", { signal, headers: await organizerHeaders(getToken) }),
+  saveFeedback: async (feedback, getToken) => request("/api/beta", {
+    method: "POST",
+    headers: await organizerHeaders(getToken, { "Content-Type": "application/json" }),
+    body: JSON.stringify(feedback),
+  }),
+  insights: async (getToken, signal) => request("/api/beta?insights=1", { signal, headers: await organizerHeaders(getToken) }),
+};

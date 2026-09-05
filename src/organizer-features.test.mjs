@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { buildEventCsv } from "./exports.mjs";
 import { validateFrequentPlayers } from "./frequent-players.mjs";
+import { validateBetaFeedback } from "./beta-feedback.mjs";
 
 test("frequent-player validation preserves names and mixed-doubles gender selections", () => {
   const players = validateFrequentPlayers({
@@ -38,4 +39,12 @@ test("CSV export contains schedule, results, escaped names, and standings", () =
   assert.match(csv, /"Friday, Tennis",1,9:00 AM,Court 1,Alex \/ Bailey,Casey \/ Drew,Doubles,completed,4-2/);
   assert.match(csv, /Standings/);
   assert.match(csv, /Alex,1,1,0,0,4,2,2/);
+});
+
+test("beta feedback accepts the three pricing choices and limits optional comments", () => {
+  assert.deepEqual(validateBetaFeedback({ willingness: "yes", comment: "  Useful for my club.  " }), { willingness: "yes", comment: "Useful for my club." });
+  assert.deepEqual(validateBetaFeedback({ willingness: "maybe", comment: "" }), { willingness: "maybe", comment: "" });
+  assert.deepEqual(validateBetaFeedback({ willingness: "not_yet", comment: "Needs RSVPs" }), { willingness: "not_yet", comment: "Needs RSVPs" });
+  assert.throws(() => validateBetaFeedback({ willingness: "unsure", comment: "" }), /Yes, Maybe, or Not yet/);
+  assert.throws(() => validateBetaFeedback({ willingness: "yes", comment: "x".repeat(1001) }), /1,000 characters/);
 });

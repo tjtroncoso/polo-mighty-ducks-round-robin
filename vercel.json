@@ -2,13 +2,24 @@
   "rewrites": [
     { "source": "/events/:path*", "destination": "/index.html" },
     { "source": "/join/:path*", "destination": "/index.html" },
-    { "source": "/pro", "destination": "/index.html" }
+    { "source": "/pro", "destination": "/index.html" },
+    { "source": "/faq", "destination": "/index.html" },
+    { "source": "/beta-insights", "destination": "/index.html" }
   ],
-  "headers": [{
-    "source": "/events/:path*",
-    "headers": [
-      { "key": "X-Robots-Tag", "value": "noindex, nofollow" },
-      { "key": "Referrer-Policy", "value": "no-referrer" }
-    ]
-  }]
+  "headers": [
+    {
+      "source": "/events/:path*",
+      "headers": [
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow" },
+        { "key": "Referrer-Policy", "value": "no-referrer" }
+      ]
+    },
+    {
+      "source": "/beta-insights",
+      "headers": [
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow" },
+        { "key": "Referrer-Policy", "value": "no-referrer" }
+      ]
+    }
+  ]
 }

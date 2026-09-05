@@ -55,6 +55,13 @@ const schema = [
     UNIQUE (owner_user_id, normalized_name)
   )`,
   "CREATE INDEX IF NOT EXISTS tennis_saved_players_owner_updated_idx ON tennis_saved_players (owner_user_id, updated_at DESC)",
+  `CREATE TABLE IF NOT EXISTS tennis_beta_feedback (
+    user_id TEXT PRIMARY KEY,
+    willingness TEXT NOT NULL CHECK (willingness IN ('yes', 'maybe', 'not_yet')),
+    comment TEXT NOT NULL DEFAULT '',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`,
 ];
 
 function publicResult(row) {
@@ -220,6 +227,82 @@ export function createEventStore(database) {
       await initialize();
       const rows = await database.query("DELETE FROM tennis_saved_players WHERE id = $1 AND owner_user_id = $2 RETURNING id", [id, ownerUserId]);
       return Boolean(rows.length);
+    },
+    async getBetaFeedback(userId) {
+      await initialize();
+      const [feedback] = await database.query(
+        "SELECT willingness, comment, updated_at FROM tennis_beta_feedback WHERE user_id = $1",
+        [userId],
+      );
+      return feedback ? {
+        willingness: feedback.willingness,
+        comment: feedback.comment,
+        updatedAt: new Date(feedback.updated_at).toISOString(),
+      } : null;
+    },
+    async saveBetaFeedback(userId, feedback) {
+      await initialize();
+      const [saved] = await database.query(
+        `INSERT INTO tennis_beta_feedback (user_id, willingness, comment)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (user_id) DO UPDATE SET willingness = EXCLUDED.willingness, comment = EXCLUDED.comment, updated_at = now()
+         RETURNING willingness, comment, updated_at`,
+        [userId, feedback.willingness, feedback.comment],
+      );
+      return {
+        willingness: saved.willingness,
+        comment: saved.comment,
+        updatedAt: new Date(saved.updated_at).toISOString(),
+      };
+    },
+    async getBetaInsights() {
+      await initialize();
+      const events = await database.query(
+        `SELECT owner_user_id, snapshot, created_at,
+          (SELECT COUNT(*) FROM tennis_results WHERE event_id = tennis_events.id AND result->>'status' <> 'scheduled') AS scored_matches,
+          (SELECT COUNT(*) FROM tennis_results WHERE event_id = tennis_events.id AND result->>'status' = 'completed') AS completed_matches
+         FROM tennis_events WHERE owner_user_id IS NOT NULL`,
+        [],
+      );
+      const feedbackRows = await database.query(
+        "SELECT willingness, comment, updated_at FROM tennis_beta_feedback ORDER BY updated_at DESC",
+        [],
+      );
+      const organizerEventCounts = new Map();
+      let scoredEvents = 0;
+      let completedEvents = 0;
+      let recentEvents = 0;
+      const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+      for (const event of events) {
+        organizerEventCounts.set(event.owner_user_id, (organizerEventCounts.get(event.owner_user_id) || 0) + 1);
+        const matchCount = Array.isArray(event.snapshot?.rounds)
+          ? event.snapshot.rounds.reduce((total, round) => total + (Array.isArray(round.matches) ? round.matches.length : 0), 0)
+          : 0;
+        if (Number(event.scored_matches) > 0) scoredEvents += 1;
+        if (matchCount > 0 && Number(event.completed_matches) === matchCount) completedEvents += 1;
+        if (new Date(event.created_at).getTime() >= thirtyDaysAgo) recentEvents += 1;
+      }
+      const willingness = { yes: 0, maybe: 0, notYet: 0 };
+      for (const feedback of feedbackRows) {
+        if (feedback.willingness === "yes") willingness.yes += 1;
+        else if (feedback.willingness === "maybe") willingness.maybe += 1;
+        else willingness.notYet += 1;
+      }
+      return {
+        organizers: organizerEventCounts.size,
+        repeatOrganizers: [...organizerEventCounts.values()].filter((count) => count >= 2).length,
+        events: events.length,
+        recentEvents,
+        scoredEvents,
+        completedEvents,
+        responses: feedbackRows.length,
+        willingness,
+        comments: feedbackRows.filter((feedback) => feedback.comment).slice(0, 50).map((feedback) => ({
+          willingness: feedback.willingness,
+          comment: feedback.comment,
+          updatedAt: new Date(feedback.updated_at).toISOString(),
+        })),
+      };
     },
   };
 }

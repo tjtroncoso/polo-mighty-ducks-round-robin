@@ -7,6 +7,7 @@ import { getSetupIssues } from "./setup-status.mjs";
 import OrganizerEvents from "./OrganizerEvents.jsx";
 import FrequentPlayers from "./FrequentPlayers.jsx";
 import ProUpgradeModal from "./ProUpgradeModal.jsx";
+import BetaFeedback from "./BetaFeedback.jsx";
 
 const createBlankPlayer = () => ({
   id:
@@ -626,6 +627,7 @@ export default function TennisRoundRobinGenerator({ auth, accountControls, proSi
 
           <main className="space-y-6">
             {isOrganizer ? <OrganizerEvents getToken={auth.getToken} /> : null}
+            {isOrganizer ? <BetaFeedback getToken={auth.getToken} /> : null}
             <Panel className="p-6">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-xl font-semibold">Ready to play?</h2>
@@ -759,6 +761,7 @@ export default function TennisRoundRobinGenerator({ auth, accountControls, proSi
             </Panel>
           </main>
         </div>
+        <footer className="pb-4 text-center text-xs text-white/85">Tennis Round Robin Generator · <a href="/faq" className="font-semibold underline underline-offset-2">FAQ & beta details</a></footer>
       </div>
       {showProUpgrade ? <ProUpgradeModal accessAction={proSignInAction} onClose={closeProUpgrade} /> : null}
     </div>

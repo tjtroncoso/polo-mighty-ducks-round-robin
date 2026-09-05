@@ -8,6 +8,7 @@ import { PGlite } from "@electric-sql/pglite";
 import { createEventStore, getDatabaseUrl, getEventStore } from "./store.mjs";
 import { createEventHandler } from "./handler.mjs";
 import { createPlayerHandler } from "./player-handler.mjs";
+import { createBetaHandler } from "./beta-handler.mjs";
 
 function lineup() {
   return {
@@ -20,7 +21,7 @@ function lineup() {
   };
 }
 const score = (a, b, status = "completed") => ({ status, scores: [{ a, b, kind: "games" }] });
-let database, directory, store, handle, playerHandle;
+let database, directory, store, handle, playerHandle, betaHandle;
 function adapter(db) {
   return {
     query: async (query, values) => (await db.query(query, values)).rows,
@@ -37,6 +38,7 @@ before(async () => {
   store = createEventStore(adapter(database));
   handle = createEventHandler(() => store, async (request) => request.headers.get("x-test-user"));
   playerHandle = createPlayerHandler(() => store, async (request) => request.headers.get("x-test-user"));
+  betaHandle = createBetaHandler(() => store, async (request) => request.headers.get("x-test-user"), { BETA_ADMIN_USER_IDS: "organizer-one" });
 });
 after(async () => { await database.close(); await rm(directory, { recursive: true, force: true }); });
 
@@ -47,6 +49,11 @@ async function call(method, query = "", body, headers = {}) {
 
 async function callPlayer(method, query = "", requestBody, headers = {}) {
   const response = await playerHandle(new Request(`https://tennis.example/api/players${query}`, { method, headers: { "Content-Type": "application/json", "X-Test-User": "organizer-one", ...headers }, ...(requestBody === undefined ? {} : { body: JSON.stringify(requestBody) }) }));
+  return { status: response.status, body: await response.json() };
+}
+
+async function callBeta(method, query = "", requestBody, headers = {}) {
+  const response = await betaHandle(new Request(`https://tennis.example/api/beta${query}`, { method, headers: { "Content-Type": "application/json", "X-Test-User": "organizer-one", ...headers }, ...(requestBody === undefined ? {} : { body: JSON.stringify(requestBody) }) }));
   return { status: response.status, body: await response.json() };
 }
 
@@ -116,6 +123,29 @@ test("organizers can save and reuse individual frequent players without seeing a
   assert.equal((await callPlayer("DELETE", `?id=${alexId}`, undefined, { "X-Test-User": "organizer-two" })).status, 404);
   assert.equal((await callPlayer("DELETE", `?id=${alexId}`)).status, 200);
   assert.equal((await callPlayer("GET")).body.players.length, 1);
+});
+
+test("organizers can save one pricing response and only an allowlisted owner can view aggregate insights", async () => {
+  const anonymous = createBetaHandler(() => store, async () => null, { BETA_ADMIN_USER_IDS: "organizer-one" });
+  assert.equal((await anonymous(new Request("https://tennis.example/api/beta"))).status, 401);
+
+  const saved = await callBeta("POST", "", { willingness: "yes", comment: "Automatic standings save me time." });
+  assert.equal(saved.status, 201);
+  assert.equal(saved.body.feedback.willingness, "yes");
+  assert.equal((await callBeta("GET")).body.feedback.comment, "Automatic standings save me time.");
+
+  const updated = await callBeta("POST", "", { willingness: "maybe", comment: "Add RSVPs first." });
+  assert.equal(updated.body.feedback.willingness, "maybe");
+  assert.equal((await callBeta("POST", "", { willingness: "unsure", comment: "" })).status, 400);
+
+  const forbidden = await callBeta("GET", "?insights=1", undefined, { "X-Test-User": "organizer-two" });
+  assert.equal(forbidden.status, 403);
+  const owner = await callBeta("GET", "?insights=1");
+  assert.equal(owner.status, 200);
+  assert.equal(owner.body.insights.responses, 1, "updating feedback does not create a second response");
+  assert.equal(owner.body.insights.willingness.maybe, 1);
+  assert.ok(owner.body.insights.comments.some((item) => item.comment === "Add RSVPs first."));
+  assert.ok(Number.isInteger(owner.body.insights.events));
 });
 
 test("owners can invite a signed-in co-organizer without giving away archive or delete control", async () => {

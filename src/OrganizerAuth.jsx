@@ -3,6 +3,7 @@ import { ClerkProvider, SignInButton, UserButton, useAuth } from "@clerk/react";
 import App from "./App.jsx";
 import OrganizerInvite from "./OrganizerInvite.jsx";
 import ProPage from "./ProPage.jsx";
+import BetaInsights from "./BetaInsights.jsx";
 
 function BetaAccessButton({ variant = "dark" }) {
   const { isLoaded, isSignedIn } = useAuth();
@@ -26,6 +27,7 @@ function AccountControls() {
   return (
     <div className="flex shrink-0 items-center gap-3 rounded-2xl border border-emerald-950/10 bg-white/90 px-3 py-2 shadow-sm">
       <span className="hidden text-xs font-semibold uppercase tracking-wide text-emerald-900 sm:inline">Paid beta</span>
+      <a href="/faq" className="text-sm font-semibold text-emerald-900 hover:underline">FAQ</a>
       <a href="/pro" className="text-sm font-semibold text-emerald-900 hover:underline">Explore Pro</a>
       {!isLoaded ? <span className="text-sm text-slate-500">Loading account…</span> : null}
       {isLoaded && !isSignedIn ? (
@@ -55,6 +57,11 @@ export function ClerkProPage() {
   return <ProPage renderAccessAction={(variant) => <BetaAccessButton variant={variant} />} accountControls={<AccountControls />} />;
 }
 
+export function ClerkBetaInsights() {
+  const { getToken, isLoaded, isSignedIn } = useAuth();
+  return <BetaInsights getToken={getToken} isLoaded={isLoaded} isSignedIn={Boolean(isSignedIn)} signInAction={<BetaAccessButton />} />;
+}
+
 export function ClerkGeneratorRoot({ publishableKey }) {
   return (
     <ClerkProvider publishableKey={publishableKey}>
@@ -75,6 +82,14 @@ export function ClerkProPageRoot({ publishableKey }) {
   return (
     <ClerkProvider publishableKey={publishableKey}>
       <ClerkProPage />
+    </ClerkProvider>
+  );
+}
+
+export function ClerkBetaInsightsRoot({ publishableKey }) {
+  return (
+    <ClerkProvider publishableKey={publishableKey}>
+      <ClerkBetaInsights />
     </ClerkProvider>
   );
 }

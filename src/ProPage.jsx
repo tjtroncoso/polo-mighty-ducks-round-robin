@@ -20,7 +20,7 @@ export default function ProPage({ renderAccessAction, accountControls }) {
       <div className="tennis-backdrop" aria-hidden="true" />
       <div className="relative z-10 mx-auto max-w-6xl space-y-6">
         <nav className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/70 bg-white/95 px-4 py-3 shadow-lg" aria-label="Pro page navigation">
-          <a href="/" className="inline-flex items-center gap-2 text-sm font-bold text-emerald-950 hover:underline"><ArrowLeft className="h-4 w-4" /> Free generator</a>
+          <div className="flex items-center gap-4"><a href="/" className="inline-flex items-center gap-2 text-sm font-bold text-emerald-950 hover:underline"><ArrowLeft className="h-4 w-4" /> Free generator</a><a href="/faq" className="text-sm font-semibold text-emerald-900 hover:underline">FAQ</a></div>
           {accountControls}
         </nav>
 
@@ -128,7 +128,7 @@ export default function ProPage({ renderAccessAction, accountControls }) {
           <div className="mx-auto mt-5 flex max-w-sm flex-col">{renderAccessAction ? renderAccessAction("footer") : <a href="/" className="rounded-xl bg-emerald-950 px-5 py-3 font-bold text-white">Open the free generator</a>}</div>
         </section>
 
-        <footer className="pb-4 text-center text-xs text-white/80">Tennis Round Robin Generator · Free scheduling with optional Pro event management</footer>
+        <footer className="pb-4 text-center text-xs text-white/80">Tennis Round Robin Generator · Free scheduling with optional Pro event management · <a href="/faq" className="underline">FAQ</a></footer>
       </div>
     </div>
   );

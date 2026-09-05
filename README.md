@@ -14,10 +14,10 @@ Ready-to-deploy Vite + React app.
 ## Publish a lineup and enter results
 
 1. Generate the lineup, optionally name the event, and choose **Publish lineup & track results**.
-2. Share the event link with the group. Anyone holding that link can enter, correct, or clear scores without an account. The link is the access key; there is no organizer-only role or public event directory.
+2. Share the event link with the group. Anyone holding that link can enter, correct, or clear scores without an account. The link is the access key; there is no public event directory.
 3. On each court, choose **Enter score**, then **Save progress** or **Save final score**. The page checks for shared updates every 15 seconds and when returning to the tab. If another person edits the same match, load their score before making a correction.
 
-Publishing saves an immutable lineup in PostgreSQL. Editing or shuffling the generator afterward cannot change it; publish a new event for a new lineup. Repeating a publication after a lost response returns the same event. Keep the event link to return later; there is no account-based event history.
+Publishing saves an immutable lineup in PostgreSQL. Editing or shuffling the generator afterward cannot change it; publish a new event for a new lineup. Repeating a publication after a lost response returns the same event. Signed-in organizers have a private dashboard for event history, frequent players, duplication, export, co-organizer invitations, archiving, and deletion.
 
 Scoring:
 
@@ -54,8 +54,14 @@ Shared results need a database; schedule generation and copying work without one
 3. Create a separate Neon database or branch for the paid beta and connect it as `PAID_BETA_DATABASE_URL`, scoped only to the Vercel **Preview** environment and the `paid-beta` Git branch. The beta deliberately refuses to fall back to `DATABASE_URL`.
 4. Redeploy after connecting the database, or merge this feature after the connection is in place. Environment variables apply to new deployments.
 
-The API creates its two tables (`tennis_events`, `tennis_results`) automatically on first use, using a PostgreSQL advisory lock so simultaneous function starts are safe. No manual SQL migration is needed for initial setup. The connection role needs permission to create these tables. Database errors fail explicitly; the app never substitutes local-only results or reports a successful publish without a database write.
+The API creates and updates its required tables automatically on first use, using a PostgreSQL advisory lock so simultaneous function starts are safe. No manual SQL migration is needed for initial setup. The connection role needs permission to create these tables. Database errors fail explicitly; the app never substitutes local-only results or reports a successful publish without a database write.
 
-`api/events.mjs` is a Vercel Node.js function. `vercel.json` sends `/events/:id` to the React app without rewriting `/api/events`. Database access stays on the server, and responses containing events/scores are not cached. Event pages ask search engines not to index them and omit referrer information. These headers do not replace the link-based editing policy above.
+### Private beta validation
+
+The signed-in organizer dashboard includes an optional pricing question and comment. One response is stored per Clerk user and can be updated at any time; submitting it never starts a subscription. `/faq` explains the current beta behavior.
+
+The owner-only `/beta-insights` page summarizes published events, repeat organizers, events with scores, completed events, and voluntary pricing responses. It derives usage from first-party event data rather than adding player profiles or broad behavioral tracking. To authorize an owner, add the Clerk user ID to `BETA_ADMIN_USER_IDS`, scoped only to the Vercel **Preview** environment and the `paid-beta` Git branch, then redeploy. Multiple owner IDs can be comma-separated. Authorization is enforced by the API; knowing the URL is not enough to view the data.
+
+`api/events.mjs`, `api/players.mjs`, and `api/beta.mjs` are Vercel Node.js functions. `vercel.json` sends browser routes to the React app without rewriting `/api/*`. Database access stays on the server, and responses containing events, scores, or beta data are not cached. Event pages ask search engines not to index them and omit referrer information. These headers do not replace the link-based editing policy above.
 
 Before sharing an event with the group, publish on the deployed site, open the link on a second device, save a score, and confirm it appears on the first device. Automated local tests cannot verify your Vercel account's database connection.
