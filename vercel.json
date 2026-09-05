@@ -1,5 +1,9 @@
 {
-  "rewrites": [{ "source": "/events/:path*", "destination": "/index.html" }],
+  "rewrites": [
+    { "source": "/events/:path*", "destination": "/index.html" },
+    { "source": "/join/:path*", "destination": "/index.html" },
+    { "source": "/pro", "destination": "/index.html" }
+  ],
   "headers": [{
     "source": "/events/:path*",
     "headers": [
