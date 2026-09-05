@@ -6,6 +6,7 @@ import EventResults from "./EventResults.jsx";
 
 const eventPath = window.location.pathname.match(/^\/events\/([^/]+)\/?$/);
 const invitePath = window.location.pathname.match(/^\/join\/([^/]+)\/?$/);
+const proPath = window.location.pathname.match(/^\/pro\/?$/);
 const publishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 const root = createRoot(document.getElementById("root"));
 
@@ -17,6 +18,14 @@ if (eventPath) {
   });
 } else if (invitePath) {
   root.render(<div className="tennis-app min-h-screen p-8 text-white">Organizer login setup pending.</div>);
+} else if (proPath && publishableKey) {
+  import("./OrganizerAuth.jsx").then(({ ClerkProPageRoot }) => {
+    root.render(<ClerkProPageRoot publishableKey={publishableKey} />);
+  });
+} else if (proPath) {
+  import("./ProPage.jsx").then(({ default: ProPage }) => {
+    root.render(<ProPage />);
+  });
 } else if (publishableKey) {
   import("./OrganizerAuth.jsx").then(({ ClerkGeneratorRoot }) => {
     root.render(<ClerkGeneratorRoot publishableKey={publishableKey} />);
